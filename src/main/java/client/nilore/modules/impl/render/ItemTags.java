@@ -1,0 +1,450 @@
+package client.nilore.modules.impl.render;
+
+import client.nilore.event.EventTarget;
+import client.nilore.event.impl.Render2DEvent;
+import client.nilore.event.impl.RenderEvent;
+import client.nilore.event.impl.WorldChangeEvent;
+import client.nilore.modules.Category;
+import client.nilore.modules.Module;
+import client.nilore.modules.impl.player.InventoryManager;
+import client.nilore.settings.impl.BooleanSetting;
+import client.nilore.settings.impl.NumberSetting;
+import client.nilore.utils.game.ItemUtil;
+import client.nilore.utils.render.NavenProjectionUtil;
+import client.nilore.utils.render.RenderUtil;
+
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
+
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.EggItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.SnowballItem;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
+
+import org.joml.Vector2f;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class ItemTags extends Module {
+
+    public static ItemTags INSTANCE;
+
+    public final NumberSetting scale =
+            new NumberSetting("Scale", 0.25, 0.10, 0.50, 0.01);
+
+    public final BooleanSetting allItems =
+            new BooleanSetting("All Items", false);
+
+    public final BooleanSetting godItems =
+            new BooleanSetting("God Items", true, () -> !allItems.getValue());
+
+    public final BooleanSetting diamond =
+            new BooleanSetting("Diamond", true, () -> !allItems.getValue());
+
+    public final BooleanSetting gold =
+            new BooleanSetting("Gold", true, () -> !allItems.getValue());
+
+    public final BooleanSetting iron =
+            new BooleanSetting("Iron", true, () -> !allItems.getValue());
+
+    public final BooleanSetting enderPearl =
+            new BooleanSetting("Ender Pearl", true, () -> !allItems.getValue());
+
+    public final BooleanSetting goldenApple =
+            new BooleanSetting("Golden Apple", true, () -> !allItems.getValue());
+
+    public final BooleanSetting usefulItem =
+            new BooleanSetting("Useful Item", true, () -> !allItems.getValue());
+
+    /*
+     * 鍥哄畾绾壊鑳屾櫙锛屼笉鍐嶄娇鐢ㄥ満鏅� Blur銆�
+     *
+     * 杩欐牱鏍囩鏃犺浣嶄簬灞忓箷宸�/鍙筹紝
+     * 浜害閮藉畬鍏ㄤ竴鑷淬€�
+     */
+    private static final int BG_COLOR = 0x90000000;
+
+    private static final int NORMAL_COLOR = 0xFFFFFFFF;
+    private static final int GOD_COLOR = 0xFFFF0000;
+
+    private final ConcurrentHashMap<ItemEntity, Vector2f> entityPositions =
+            new ConcurrentHashMap<>();
+
+    public ItemTags() {
+        super("ItemTags", Category.RENDER);
+        INSTANCE = this;
+    }
+
+    @Override
+    public String getModuleName() {
+        return "ItemTags";
+    }
+
+    @Override
+    public String getDisplayName() {
+        return "搂fItemTags";
+    }
+
+    @Override
+    public void onTick() {
+    }
+
+    @Override
+    protected void onEnable() {
+        entityPositions.clear();
+        super.onEnable();
+    }
+
+    @Override
+    protected void onDisable() {
+        entityPositions.clear();
+        super.onDisable();
+    }
+
+    @EventTarget
+    public void onWorldChange(WorldChangeEvent event) {
+        entityPositions.clear();
+    }
+
+    private static String getDisplayName(ItemEntity entity) {
+        ItemStack stack = entity.getItem();
+
+        return stack.getDisplayName().getString()
+                + " * "
+                + stack.getCount();
+    }
+
+    private static boolean isKbBall(ItemStack stack) {
+        return stack.getItem() == Items.SLIME_BALL
+                && EnchantmentHelper.getItemEnchantmentLevel(
+                Enchantments.KNOCKBACK,
+                stack
+        ) > 1;
+    }
+
+    private static boolean isGodAxe(ItemStack stack) {
+        return stack.getItem() == Items.GOLDEN_AXE
+                && EnchantmentHelper.getItemEnchantmentLevel(
+                Enchantments.SHARPNESS,
+                stack
+        ) > 100;
+    }
+
+    private boolean isGodItem(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return false;
+        }
+
+        return isKbBall(stack)
+                || stack.getItem() == Items.ENCHANTED_GOLDEN_APPLE
+                || stack.getItem() == Items.END_CRYSTAL
+                || isGodAxe(stack);
+    }
+
+    private boolean isValidItem(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return false;
+        }
+
+        if (allItems.getValue()) {
+            return true;
+        }
+
+        if (godItems.getValue()) {
+            if (isKbBall(stack)
+                    || stack.getItem() == Items.ENCHANTED_GOLDEN_APPLE
+                    || isGodAxe(stack)) {
+                return true;
+            }
+        }
+
+        if (diamond.getValue()
+                && stack.getItem() == Items.DIAMOND) {
+            return true;
+        }
+
+        if (gold.getValue()
+                && stack.getItem() == Items.GOLD_INGOT) {
+            return true;
+        }
+
+        if (iron.getValue()
+                && stack.getItem() == Items.IRON_INGOT) {
+            return true;
+        }
+
+        if (enderPearl.getValue()
+                && stack.getItem() == Items.ENDER_PEARL) {
+            return true;
+        }
+
+        if (goldenApple.getValue()
+                && stack.getItem() == Items.GOLDEN_APPLE) {
+            return true;
+        }
+
+        if (usefulItem.getValue()) {
+            if (stack.getItem() instanceof BlockItem
+                    && stack.getCount() < 8) {
+                return false;
+            }
+
+            if ((stack.getItem() instanceof SnowballItem
+                    || stack.getItem() instanceof EggItem)
+                    && stack.getCount() < 3) {
+                return false;
+            }
+
+            InventoryManager manager =
+                    InventoryManager.INSTANCE;
+
+            if (manager != null) {
+                try {
+                    if (manager.isUsefulItem(stack)) {
+                        return true;
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+
+            try {
+                return ItemUtil.isUsableItem(stack);
+            } catch (Throwable ignored) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    @EventTarget
+    public void onRender(RenderEvent event) {
+        updatePositions(event.partialTick());
+    }
+
+    private void updatePositions(float partialTick) {
+        entityPositions.clear();
+
+        if (mc.player == null
+                || mc.level == null
+                || mc.gameRenderer == null) {
+            return;
+        }
+
+        for (Entity entity : mc.level.entitiesForRendering()) {
+            if (!(entity instanceof ItemEntity itemEntity)) {
+                continue;
+            }
+
+            if (itemEntity.isRemoved()
+                    || !isValidItem(itemEntity.getItem())) {
+                continue;
+            }
+
+            double x = Mth.lerp(
+                    (double) partialTick,
+                    entity.xOld,
+                    entity.getX()
+            );
+
+            double y = Mth.lerp(
+                    (double) partialTick,
+                    entity.yOld,
+                    entity.getY()
+            ) + entity.getBbHeight() + 0.5D;
+
+            double z = Mth.lerp(
+                    (double) partialTick,
+                    entity.zOld,
+                    entity.getZ()
+            );
+
+            Vector2f projected =
+                    NavenProjectionUtil.project(
+                            x,
+                            y,
+                            z,
+                            partialTick
+                    );
+
+            if (projected == null
+                    || !Float.isFinite(projected.x)
+                    || !Float.isFinite(projected.y)) {
+                continue;
+            }
+
+            projected.y -= 2.0F;
+
+            entityPositions.put(
+                    itemEntity,
+                    projected
+            );
+        }
+    }
+
+    @EventTarget
+    public void onRender2D(Render2DEvent event) {
+        if (mc.player == null
+                || mc.level == null
+                || entityPositions.isEmpty()) {
+            return;
+        }
+
+        PoseStack poseStack =
+                event.poseStack();
+
+        if (poseStack == null) {
+            return;
+        }
+
+        float width =
+                mc.getWindow().getGuiScaledWidth();
+
+        float height =
+                mc.getWindow().getGuiScaledHeight();
+
+        /*
+         * 鍘熺増 32px * 0.25 鈮� 8px銆�
+         * Vanilla font 绾� 9px锛屽洜姝ゆ槧灏勬垚鎺ヨ繎鐩稿悓瑙嗚澶у皬銆�
+         */
+        float fontScale =
+                (32.0F / 9.0F)
+                        * scale.getValue().floatValue();
+
+        /*
+         * 鍦ㄥ紑濮嬬敾鏁翠釜 ItemTags 鍓嶅氨鎭㈠鍥哄畾 UI 鐘舵€併€�
+         */
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableDepthTest();
+        RenderSystem.setShaderColor(
+                1.0F,
+                1.0F,
+                1.0F,
+                1.0F
+        );
+
+        for (Map.Entry<ItemEntity, Vector2f> entry
+                : entityPositions.entrySet()) {
+
+            ItemEntity entity =
+                    entry.getKey();
+
+            Vector2f pos =
+                    entry.getValue();
+
+            if (entity == null
+                    || entity.isRemoved()
+                    || pos == null) {
+                continue;
+            }
+
+            if (pos.x < -100.0F
+                    || pos.x > width + 100.0F
+                    || pos.y < -50.0F
+                    || pos.y > height + 50.0F) {
+                continue;
+            }
+
+            String text =
+                    getDisplayName(entity);
+
+            int color =
+                    isGodItem(entity.getItem())
+                            ? GOD_COLOR
+                            : NORMAL_COLOR;
+
+            float textWidth =
+                    mc.font.width(text)
+                            * fontScale;
+
+            float boxWidth =
+                    textWidth + 8.0F;
+
+            float left =
+                    pos.x - boxWidth / 2.0F;
+
+            float top =
+                    pos.y - 14.0F;
+
+            /*
+             * 閲嶈锛�
+             * 涓嶅啀璋冪敤 drawBlurredRect銆�
+             *
+             * Blur 浼氶噰鏍疯儗鍚庣殑涓栫晫鐢婚潰锛�
+             * 鍥犳涓€鏉℃爣绛惧乏/鍙充袱杈瑰彲鑳戒寒搴︿笉鍚屻€�
+             */
+            RenderUtil.drawFilledRect(
+                    poseStack,
+                    left,
+                    top,
+                    boxWidth,
+                    14.0F,
+                    BG_COLOR
+            );
+
+            /*
+             * 鑳屾櫙 renderer 鍙兘鍒� shader锛�
+             * 鎵€浠ユ瘡娆℃枃瀛楀墠閮介噸鏂版仮澶嶇函鐧� ShaderColor銆�
+             */
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+            RenderSystem.setShaderColor(
+                    1.0F,
+                    1.0F,
+                    1.0F,
+                    1.0F
+            );
+
+            poseStack.pushPose();
+
+            try {
+                poseStack.translate(
+                        left + 4.0F,
+                        pos.y - 12.0F,
+                        0.0F
+                );
+
+                poseStack.scale(
+                        fontScale,
+                        fontScale,
+                        1.0F
+                );
+
+                /*
+                 * shadow=false
+                 *
+                 * 閬垮厤榛戣壊 Shadow 鍦ㄥ皬瀛楀彿涓嬮€犳垚
+                 * 涓€杈圭湅璧锋潵鏇存殫銆�
+                 */
+                event.guiGraphics().drawString(
+                        mc.font,
+                        text,
+                        0,
+                        0,
+                        color,
+                        false
+                );
+            } finally {
+                poseStack.popPose();
+            }
+        }
+
+        RenderSystem.setShaderColor(
+                1.0F,
+                1.0F,
+                1.0F,
+                1.0F
+        );
+
+        RenderSystem.enableDepthTest();
+        RenderSystem.disableBlend();
+    }
+}
