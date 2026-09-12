@@ -6,9 +6,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+
+import client.nilore.NiloreClient;
 import net.minecraft.client.gui.GuiGraphics;
 import client.nilore.ClientBase;
-import client.nilore.NiloreClient;
 import client.nilore.render.DrawContext;
 import client.nilore.render.FontPresets;
 import client.nilore.render.FontRenderer;
@@ -20,7 +21,7 @@ import client.nilore.utils.math.LerpUtil;
 import client.nilore.utils.render.RenderUtil;
 
 public class SettingsPopup
-extends ClientBase {
+        extends ClientBase {
     private boolean isOpen = false;
     private boolean isDragging = false;
     private int lastDragX = 0;

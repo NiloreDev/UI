@@ -6,9 +6,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import client.nilore.NiloreClient;
 import net.minecraft.client.gui.GuiGraphics;
 import client.nilore.ClientBase;
-import client.nilore.NiloreClient;
 import client.nilore.gui.PanelClickGui;
 import client.nilore.modules.Category;
 import client.nilore.modules.Module;
@@ -23,7 +24,7 @@ import client.nilore.utils.math.LerpUtil;
 import client.nilore.utils.render.RenderUtil;
 
 public class ModuleListPanel
-extends ClientBase {
+        extends ClientBase {
     public enum AnimationState { NONE, FADE_IN, FADE_OUT, SWITCHING }
 
     private static final int HOVER_BG_COLOR = new Color(255, 255, 255, 20).getRGB();

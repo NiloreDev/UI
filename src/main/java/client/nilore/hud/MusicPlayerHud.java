@@ -1,5 +1,6 @@
 package client.nilore.hud;
 
+import client.nilore.utils.render.ColorUtil;
 import com.mojang.blaze3d.platform.NativeImage;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -18,14 +19,12 @@ import client.nilore.render.GlHelper;
 import client.nilore.render.Paint;
 import client.nilore.render.Rectangle;
 import client.nilore.render.RoundedRectangle;
-import client.nilore.render.RoundedRectShader;
 import client.nilore.render.Texture;
 import client.nilore.settings.impl.BooleanSetting;
 import client.nilore.settings.impl.ModeSetting;
 import client.nilore.settings.impl.NumberSetting;
 import client.nilore.utils.animation.SmoothAnimationTimer;
 import client.nilore.utils.math.Easings;
-import client.nilore.utils.render.ColorUtil;
 import client.nilore.utils.render.RenderUtil;
 
 public class MusicPlayerHud extends HudElement {
@@ -229,7 +228,7 @@ public class MusicPlayerHud extends HudElement {
     }
 
     private void renderMaterial3(DrawContext ctx, float x, float y, SongInfo song,
-                                  AudioPlayer player, float progress, float alpha) {
+                                 AudioPlayer player, float progress, float alpha) {
         final float width = 142.5f;
         final float height = 43.0f;
         final float padding = 4.0f * SCALE;

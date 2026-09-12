@@ -1,5 +1,7 @@
 package client.nilore.gui;
 
+import client.nilore.NiloreClient;
+import client.nilore.utils.render.ColorUtil;
 import com.mojang.blaze3d.platform.NativeImage;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -16,7 +18,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
-import client.nilore.NiloreClient;
 import client.nilore.modules.impl.misc.MusicPlayer;
 import client.nilore.modules.impl.misc.music.AudioPlayer;
 import client.nilore.modules.impl.misc.music.LyricLine;
@@ -35,7 +36,6 @@ import client.nilore.render.RoundedRectangle;
 import client.nilore.render.Texture;
 import client.nilore.utils.animation.SmoothAnimationTimer;
 import client.nilore.utils.math.Easings;
-import client.nilore.utils.render.ColorUtil;
 
 public class MusicPlayerScreen extends Screen {
     private static final float DESIGN_W = 760.32f;
@@ -70,7 +70,6 @@ public class MusicPlayerScreen extends Screen {
     private static final FontRenderer LYRIC_ACTIVE_FONT = FontPresets.pingfang(33.0f);
     private static final FontRenderer ICON_FONT = FontPresets.materialIcons(28.0f);
     private static final FontRenderer ICON_LARGE = FontPresets.materialIcons(38.0f);
-    private static final FontRenderer USERNAME_FONT = FontPresets.pingfang(33.0f);
 
     private static final String ICON_PREV = "";
     private static final String ICON_PLAY = "";
@@ -138,8 +137,6 @@ public class MusicPlayerScreen extends Screen {
 
     public MusicPlayerScreen() {
         super(Component.literal("Music Player"));
-        MusicPlayer.AUDIO_PLAYER.setNearEndListener(this::requestPreloadForNext);
-        MusicPlayer.AUDIO_PLAYER.setOnCrossfadeTrackListener(this::onCrossfadeTrack);
     }
 
     @Override
@@ -218,15 +215,15 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private void renderSidebar(DrawContext ctx, float x, float y, float w, float h, float mouseX, float mouseY) {
-        ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(x + 15.84f, y + 20.84f, 49.28f, 42.24f, 14.08f), new Paint().setColor(BERRY));
-        drawCentered(ICON_MUSIC, x + 15.84f, y + 37.56f, 49.28f, ICON_LARGE, ACCENT);
+        ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(x + 15.84f, y + 15.84f, 49.28f, 42.24f, 14.08f), new Paint().setColor(BERRY));
+        drawCentered(ICON_MUSIC, x + 15.84f, y + 32.56f, 49.28f, ICON_LARGE, ACCENT);
 
-        float navY = y + 85.08f;
+        float navY = y + 80.08f;
         navItem(ctx, x + 8.8f, navY, w - 17.6f, Page.HOME, ICON_HOME, "Home", mouseX, mouseY);
         navItem(ctx, x + 8.8f, navY + 63.36f, w - 17.6f, Page.SEARCH, ICON_SEARCH, "Search", mouseX, mouseY);
         navItem(ctx, x + 8.8f, navY + 126.72f, w - 17.6f, Page.QUEUE, ICON_QUEUE, "Queue", mouseX, mouseY);
         navItem(ctx, x + 8.8f, navY + 190.08f, w - 17.6f, Page.PLAYLIST, ICON_PLAYLIST, "Library", mouseX, mouseY);
-        navItem(ctx, x + 8.8f, h - 53.08f, w - 17.6f, Page.ABOUT, ICON_INFO, "About", mouseX, mouseY);
+        navItem(ctx, x + 8.8f, h - 58.08f, w - 17.6f, Page.ABOUT, ICON_INFO, "About", mouseX, mouseY);
     }
 
     private void navItem(DrawContext ctx, float x, float y, float w, Page target, String icon, String label,
@@ -235,7 +232,7 @@ public class MusicPlayerScreen extends Screen {
         boolean active = page == target;
         boolean hover = contains(mouseX, mouseY, x, y, w, h);
         if (active || hover) {
-            ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y - 3.0f, w, h, 15.84f),
+            ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, w, h, 15.84f),
                     new Paint().setColor(active ? 0xFF60404B : withAlpha(RAISED, 0.82f)));
         }
         drawCentered(icon, x, y + 14.08f, w, ICON_FONT, active ? ACCENT : hover ? CREAM : MUTED);
@@ -249,12 +246,9 @@ public class MusicPlayerScreen extends Screen {
         String username = Minecraft.getInstance().player == null
                 ? "Player"
                 : Minecraft.getInstance().player.getGameProfile().getName();
-        String greetingLine = greeting() + ", ";
-        GlHelper.drawText(greetingLine, innerX, y + 22.88f, DISPLAY_FONT, CREAM);
-        GlHelper.drawText(ellipsize(username, USERNAME_FONT, 376), innerX + measure(greetingLine, DISPLAY_FONT),
-                y + 22.88f, USERNAME_FONT, CREAM);
+        GlHelper.drawText(greeting() + ", " + ellipsize(username, DISPLAY_FONT, 376), innerX, y + 22.88f, DISPLAY_FONT, CREAM);
         GlHelper.drawText("Music picked for this moment", innerX, y + 51.04f, BODY_FONT, MUTED);
-        renderHeaderActions(ctx, x + w - PAD - 130.24f, y + 23.36f, mouseX, mouseY);
+        renderHeaderActions(ctx, x + w - PAD - 130.24f, y + 19.36f, mouseX, mouseY);
 
         float heroY = y + 73.04f;
         float heroH = 138.16f;
@@ -280,15 +274,15 @@ public class MusicPlayerScreen extends Screen {
         float actionW = 31.68f;
         float gap = 9.6f;
         float startX = x + (w - actionW * 3.0f - gap * 2.0f) * 0.5f;
-        headerAction(ctx, startX, y + 7, ICON_SEARCH, mouseX, mouseY, () -> openPage(Page.SEARCH));
-        headerAction(ctx, startX + actionW + gap, y + 7, ICON_INFO, mouseX, mouseY, () -> openPage(Page.ABOUT));
-        headerAction(ctx, startX + (actionW + gap) * 2.0f, y + 7, ICON_CLOSE, mouseX, mouseY, this::onClose);
+        headerAction(ctx, startX, y + 4, ICON_SEARCH, mouseX, mouseY, () -> openPage(Page.SEARCH));
+        headerAction(ctx, startX + actionW + gap, y + 4, ICON_INFO, mouseX, mouseY, () -> openPage(Page.ABOUT));
+        headerAction(ctx, startX + (actionW + gap) * 2.0f, y + 4, ICON_CLOSE, mouseX, mouseY, this::onClose);
     }
 
     private void headerAction(DrawContext ctx, float x, float y, String icon, float mouseX, float mouseY, Runnable action) {
         boolean hover = contains(mouseX, mouseY, x, y, 31.68f, 28.16f);
         if (hover) {
-            ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y - 3.0f, 31.68f, 28.16f, 14.08f), new Paint().setColor(RAISED));
+            ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, 31.68f, 28.16f, 14.08f), new Paint().setColor(RAISED));
         }
         drawCentered(icon, x, y + 12, 31.68f, ICON_FONT, hover ? ACCENT : MUTED);
         clickAreas.add(new ClickArea(x, y, 31.68f, 28.16f, action));
@@ -322,7 +316,7 @@ public class MusicPlayerScreen extends Screen {
         if (hero == null) {
             clickAreas.add(new ClickArea(textX, buttonY, buttonW, 32, () -> openPage(Page.SEARCH)));
         } else {
-            clickAreas.add(new ClickArea(x, y, w, h, () -> playSongAndOpen(hero, songs, 0, true, Page.HOME)));
+            clickAreas.add(new ClickArea(x, y, w, h, () -> playSongAndOpen(hero, songs, 0, false, Page.HOME)));
         }
     }
 
@@ -353,7 +347,7 @@ public class MusicPlayerScreen extends Screen {
             GlHelper.drawText(ellipsize(song.artist, SMALL_FONT, cardW), cardX, y + artSize + 25, SMALL_FONT, DIM);
             int index = i;
             clickAreas.add(new ClickArea(cardX, y, cardW, artSize + 38,
-                    () -> playSongAndOpen(song, songs, index, true, Page.HOME)));
+                    () -> playSongAndOpen(song, songs, index, false, Page.HOME)));
         }
     }
 
@@ -445,7 +439,7 @@ public class MusicPlayerScreen extends Screen {
                 clickAreas.add(new ClickArea(x + w - 43, rowY, 43, rowH,
                         () -> MusicPlayer.PLAYLIST.add(searchResults.get(index))));
                 clickAreas.add(new ClickArea(x, rowY, w - 48, rowH,
-                        () -> playSong(searchResults.get(index), searchResults, index, true)));
+                        () -> playSong(searchResults.get(index), searchResults, index, false)));
             }
         }
         ctx.restore();
@@ -523,7 +517,7 @@ public class MusicPlayerScreen extends Screen {
                             () -> MusicPlayer.PLAYLIST.remove(index)));
                 }
                 clickAreas.add(new ClickArea(innerX, rowY, innerW - (removable ? 49 : 0), rowH,
-                        () -> playSongAndOpen(songs.get(index), songs, index, true,
+                        () -> playSongAndOpen(songs.get(index), songs, index, removable,
                                 playlist ? Page.PLAYLIST : Page.QUEUE)));
             }
         }
@@ -594,7 +588,7 @@ public class MusicPlayerScreen extends Screen {
         drawControl(ctx, center + sideOffset - 13.64f, y + 20.24f, 27.28f, 29.92f, ICON_NEXT, false, mouseX, mouseY, this::nextSong);
 
         String current = timestamp(player.getCurrentPositionMs());
-        GlHelper.drawText(current, x + w - 131, y + 34, SMALL_FONT, MUTED);
+        GlHelper.drawText(current, x + w - 131, y + 33, SMALL_FONT, MUTED);
         GlHelper.drawText(ICON_VOLUME, x + w - 93, y + 37, ICON_FONT, MUTED);
         float volumeX = x + w - 70;
         float volume = dragTarget == DragTarget.VOLUME && pendingVolume >= 0 ? pendingVolume : player.getVolume();
@@ -993,13 +987,6 @@ public class MusicPlayerScreen extends Screen {
                 }
             } catch (Exception ignored) { }
         });
-        if (MusicPlayer.AUDIO_PLAYER.isPreloadedFor(song)) {
-            String preloadedUrl = MusicPlayer.AUDIO_PLAYER.getPreloadedUrl(song);
-            if (preloadedUrl != null) {
-                startPlayback(song, preloadedUrl, request, autoAdvance, true);
-                return;
-            }
-        }
         NeteaseApi.getSongUrl(song.id).thenAccept(result -> {
             if (result == null || playRequestSeq.get() != request) {
                 return;
@@ -1017,12 +1004,8 @@ public class MusicPlayerScreen extends Screen {
     }
 
     private void startPlayback(SongInfo song, String url, long request, boolean autoAdvance) {
-        startPlayback(song, url, request, autoAdvance, false);
-    }
-
-    private void startPlayback(SongInfo song, String url, long request, boolean autoAdvance, boolean usePreload) {
         if (playRequestSeq.get() == request) {
-            MusicPlayer.AUDIO_PLAYER.play(song, url, autoAdvance ? () -> playNextFromPlaylist(request) : null, usePreload);
+            MusicPlayer.AUDIO_PLAYER.play(song, url, autoAdvance ? () -> playNextFromPlaylist(request) : null);
         }
     }
 
@@ -1032,53 +1015,6 @@ public class MusicPlayerScreen extends Screen {
         }
         int next = (queueIndex + 1) % playQueue.size();
         playSong(playQueue.get(next), playQueue, next, true);
-    }
-
-    private void onCrossfadeTrack() {
-        SongInfo song = MusicPlayer.AUDIO_PLAYER.getCurrentSong();
-        if (song == null) {
-            return;
-        }
-        for (int i = 0; i < playQueue.size(); i++) {
-            if (playQueue.get(i).id == song.id) {
-                queueIndex = i;
-                break;
-            }
-        }
-        lyricSongId = -1;
-        if (lyricsCache.containsKey(song.id)) {
-            return;
-        }
-        NeteaseApi.getLyrics(song.id).thenAccept(lines -> {
-            List<LyricLine> safeLines = lines == null ? List.of() : lines;
-            lyricsCache.put(song.id, safeLines);
-            lyricsRequested.put(song.id, true);
-            try {
-                LyricsModule module = NiloreClient.getInstance().getModuleManager().getModule(LyricsModule.class);
-                if (module != null) {
-                    module.setLyrics(song.id, safeLines);
-                }
-            } catch (Exception ignored) { }
-        });
-    }
-
-    private void requestPreloadForNext() {
-        if (!MusicPlayer.AUDIO_PLAYER.isMelodifyEnabled() || !playlistAutoAdvance
-                || playQueue.isEmpty() || queueIndex < 0) {
-            return;
-        }
-        int next = (queueIndex + 1) % playQueue.size();
-        SongInfo nextSong = playQueue.get(next);
-        if (nextSong == null || MusicPlayer.AUDIO_PLAYER.isPreloadedFor(nextSong)) {
-            return;
-        }
-        NeteaseApi.getSongUrl(nextSong.id).thenAccept(result -> {
-            if (result == null || result.url() == null || result.url().isBlank()
-                    || MusicPlayer.AUDIO_PLAYER.isPreloadedFor(nextSong)) {
-                return;
-            }
-            MusicPlayer.AUDIO_PLAYER.preloadNext(nextSong, result.url());
-        });
     }
 
     private void nextSong() {

@@ -1,8 +1,12 @@
+// client/nilore/render/GlHelper.java
 package client.nilore.render;
 
 import java.awt.Color;
 import java.util.HashMap;
 import java.util.Map;
+
+import client.nilore.utils.render.ColorUtil;
+import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.texture.AbstractTexture;
@@ -10,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import client.nilore.ClientBase;
-import client.nilore.utils.render.ColorUtil;
+import client.nilore.utils.render.ShaderCompatUtil;
 
 public final class GlHelper {
     private static final Map<FontRenderer, Map<String, Float>> stringWidthCache = new HashMap<>();
@@ -24,8 +28,15 @@ public final class GlHelper {
     }
 
     public static float drawText(String text, float x, float y, FontRenderer fontRenderer, int color) {
-        Paint paint = GlHelper.toPaint(color);
-        return GlHelper.drawTextFormatted(text, x, y, fontRenderer, paint, false);
+        // ===== 光影兼容 =====
+        ShaderCompatUtil.beginUIRender();
+
+        try {
+            Paint paint = GlHelper.toPaint(color);
+            return GlHelper.drawTextFormatted(text, x, y, fontRenderer, paint, false);
+        } finally {
+            ShaderCompatUtil.endUIRender();
+        }
     }
 
     public static int getFontAscent(FontRenderer fontRenderer) {
@@ -83,35 +94,49 @@ public final class GlHelper {
     }
 
     public static float drawTextFormatted(String text, float x, float y, FontRenderer fontRenderer, Paint paint, boolean keepColor) {
-        if (text == null || text.isEmpty()) {
-            return x;
-        }
-        DrawContext drawContext = GlHelper.getCanvas();
-        int color = paint.getColor();
-        float cursorX = x;
-        float baselineY = y + (float)GlHelper.getFontAscent(fontRenderer);
-        String[] parts = text.split("§");
-        for (int i = 0; i < parts.length; ++i) {
-            char code;
-            ChatFormatting chatFormatting;
-            String part = parts[i];
-            if (i > 0 && !part.isEmpty() && (chatFormatting = ChatFormatting.getByCode(code = part.charAt(0))) != null) {
-                if (!keepColor && chatFormatting.getColor() != null) {
-                    color = ColorUtil.withAlpha(chatFormatting.getColor(), (float)(color >> 24 & 0xFF) / 255.0f);
-                }
-                part = part.substring(1);
+        // ===== 光影兼容 =====
+        ShaderCompatUtil.beginUIRender();
+
+        try {
+            if (text == null || text.isEmpty()) {
+                return x;
             }
-            drawContext.drawString(part, cursorX, baselineY, fontRenderer, paint.setColor(color));
-            cursorX += GlHelper.getStringWidth(part, fontRenderer);
+            DrawContext drawContext = GlHelper.getCanvas();
+            int color = paint.getColor();
+            float cursorX = x;
+            float baselineY = y + (float)GlHelper.getFontAscent(fontRenderer);
+            String[] parts = text.split("§");
+            for (int i = 0; i < parts.length; ++i) {
+                char code;
+                ChatFormatting chatFormatting;
+                String part = parts[i];
+                if (i > 0 && !part.isEmpty() && (chatFormatting = ChatFormatting.getByCode(code = part.charAt(0))) != null) {
+                    if (!keepColor && chatFormatting.getColor() != null) {
+                        color = ColorUtil.withAlpha(chatFormatting.getColor(), (float)(color >> 24 & 0xFF) / 255.0f);
+                    }
+                    part = part.substring(1);
+                }
+                drawContext.drawString(part, cursorX, baselineY, fontRenderer, paint.setColor(color));
+                cursorX += GlHelper.getStringWidth(part, fontRenderer);
+            }
+            return cursorX;
+        } finally {
+            ShaderCompatUtil.endUIRender();
         }
-        return cursorX;
     }
 
     public static float drawTextWithShadow(String text, float x, float y, FontRenderer fontRenderer, Paint paint) {
-        int color = paint.getColor();
-        GlHelper.drawTextFormatted(text, x + 0.5f, y + 0.5f, fontRenderer, paint.setColor(ColorUtil.fromARGB(0, 0, 0, (int)((float)ColorUtil.getAlpha(paint.getColor()) * 0.65f * 255.0f))), true);
-        paint.setColor(color);
-        return GlHelper.drawTextFormatted(text, x, y, fontRenderer, paint, false);
+        // ===== 光影兼容 =====
+        ShaderCompatUtil.beginUIRender();
+
+        try {
+            int color = paint.getColor();
+            GlHelper.drawTextFormatted(text, x + 0.5f, y + 0.5f, fontRenderer, paint.setColor(ColorUtil.fromARGB(0, 0, 0, (int)((float)ColorUtil.getAlpha(paint.getColor()) * 0.65f * 255.0f))), true);
+            paint.setColor(color);
+            return GlHelper.drawTextFormatted(text, x, y, fontRenderer, paint, false);
+        } finally {
+            ShaderCompatUtil.endUIRender();
+        }
     }
 
     public static float drawTextShadowLegacy(String text, float x, float y, FontRenderer fontRenderer, int color) {
@@ -203,5 +228,8 @@ public final class GlHelper {
 
     static {
         new HashMap<>();
+    }
+
+    public static void drawText(PoseStack pose, String text, int color, boolean b) {
     }
 }

@@ -87,6 +87,9 @@ public class Stuck extends Module {
     private boolean pendingDisable = false;
     private final Queue<ServerboundPongPacket> pongQueue = new ConcurrentLinkedQueue<>();
 
+    // Delay 模式：卡空期间绕过 NegativeTimer 用的补包计数器
+    private int delayMovePackets = 0;
+
     // ======================================================================
     // CONSTRUCTOR
     // ======================================================================
@@ -145,6 +148,8 @@ public class Stuck extends Module {
                 this.savedPitch = RotationHandler.targetRotation.getPitch();
             }
             this.pendingDisable = false;
+            // Delay 补包计数器初始化
+            this.delayMovePackets = 0;
         }
         super.onEnable();
     }
@@ -156,6 +161,9 @@ public class Stuck extends Module {
             this.refreezeTicks = 0;
             this.sendYaw360 = false;
             this.release();
+        } else {
+            // Delay 补包计数器复位
+            this.delayMovePackets = 0;
         }
         super.onDisable();
     }
@@ -231,6 +239,22 @@ public class Stuck extends Module {
         }
         if (motionEvent.isPost()) {
             mc.player.setDeltaMovement(0.0, 0.0, 0.0);
+
+            // ===== Delay 模式：卡空期间周期性补发纯 Rot 包，绕过 NegativeTimer =====
+            if (this.modeSetting.is("Delay")
+                    && (this.stuckState == 1 || this.stuckState == 2)) {
+                this.delayMovePackets++;
+                if (this.delayMovePackets >= 20) {
+                    this.delayMovePackets = 0;
+                    PacketUtil.sendQueued(new ServerboundMovePlayerPacket.Rot(
+                            mc.player.getYRot(),
+                            mc.player.getXRot(),
+                            mc.player.onGround()
+                    ));
+                }
+            }
+            // ===== 结束 =====
+
             if (this.stuckState == 1) {
                 this.stuckState = 2;
                 float currentYaw = mc.player.getYRot();

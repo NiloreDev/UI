@@ -39,7 +39,6 @@ import client.nilore.event.impl.UpdateHeldItemEvent;
 import client.nilore.hud.ModuleListHud;
 import client.nilore.modules.Category;
 import client.nilore.modules.Module;
-import client.nilore.modules.impl.misc.Eagle;
 import client.nilore.render.FontPresets;
 import client.nilore.render.FontRenderer;
 import client.nilore.render.GlHelper;
@@ -72,20 +71,7 @@ public class Scaffold extends Module {
     public final ModeSetting mode = new ModeSetting("Mode", "Normal", "Telly", "KeepY").withDefault("Telly");
     public final NumberSetting tellyAirTicks = new NumberSetting("AirTicks", 1, 0, 3, 0.1, () -> this.mode.is("Telly"));
     public final NumberSetting tellyPlaceDelay = new NumberSetting("PlaceDelay", 0, 0, 20, 1, () -> this.mode.is("Telly"));
-    public final BooleanSetting noUpTelly = new BooleanSetting("No Up Telly", false, () -> this.mode.is("Telly"));
-
-    // ======================================================================
-    // NO UP TELLY 速度限制设置
-    // ======================================================================
-    public final BooleanSetting noUpTellySpeedLimit = new BooleanSetting(
-            "No Up Telly Speed Limit", true,
-            () -> this.mode.is("Telly") && this.noUpTelly.getValue());
-    public final NumberSetting noUpTellyMinBps = new NumberSetting(
-            "No Up Telly Min BPS", 4.0, 0.0, 10.0, 0.1,
-            () -> this.mode.is("Telly") && this.noUpTelly.getValue() && this.noUpTellySpeedLimit.getValue());
-    public final NumberSetting noUpTellyMaxBps = new NumberSetting(
-            "No Up Telly Max BPS", 5.7, 0.0, 10.0, 0.1,
-            () -> this.mode.is("Telly") && this.noUpTelly.getValue() && this.noUpTellySpeedLimit.getValue());
+    public final BooleanSetting noUpTelly = new BooleanSetting("No up telly", false, () -> this.mode.is("Telly"));
 
     public final BooleanSetting eagle = new BooleanSetting("Eagle", true, () -> this.mode.is("Normal"));
 
@@ -105,7 +91,6 @@ public class Scaffold extends Module {
     public final ModeSetting switchMode = new ModeSetting("Switch Mode", "Normal", "Hotbar", "Full").withDefault("Hotbar");
     public final BooleanSetting supportOffhand = new BooleanSetting("Support Offhand", true);
 
-    // OpenSSNG style block management
     public final ModeSetting blockSwitchMode = new ModeSetting(
             "Block Switch",
             "First",
@@ -169,12 +154,10 @@ public class Scaffold extends Module {
     private BlockPos lastC05Position;
     private int tellyPlaceDelayTimer;
 
-    // 自动大陆状态
     private float continentYaw = 0;
     private float continentPitch = 0;
     private int continentJumpCounter = 0;
 
-    // 副手方块计数缓存
     private int lastOffhandCount = 0;
 
     // ======================================================================
@@ -200,17 +183,11 @@ public class Scaffold extends Module {
         return false;
     }
 
-    // ================================================================
-    // getModuleName - 返回模块名称
-    // ================================================================
     @Override
     public String getModuleName() {
         return "Scaffold";
     }
 
-    // ================================================================
-    // getSuffix - 返回不带颜色代码的后缀（纯文本）
-    // ================================================================
     @Override
     public String getSuffix() {
         String modeName = mode.getValue();
@@ -225,9 +202,6 @@ public class Scaffold extends Module {
 
     }
 
-    // ================================================================
-    // getDisplayName - 覆盖主题颜色，全部显示为白色
-    // ================================================================
     @Override
     public String getDisplayName() {
         String modeName = mode.getValue();
@@ -258,12 +232,10 @@ public class Scaffold extends Module {
             this.packetBatches.clear();
             this.packetBatches.add(new CopyOnWriteArrayList<>());
 
-            // 初始化自动大陆
             this.continentYaw = mc.player.getYRot();
             this.continentPitch = mc.player.getXRot();
             this.continentJumpCounter = 0;
 
-            // 初始化副手计数
             this.lastOffhandCount = getOffhandBlockCount();
         }
         this.shelfHudInitialized = mc.player != null;
@@ -354,8 +326,6 @@ public class Scaffold extends Module {
         return -1;
     }
 
-
-    // OpenSSNG: choose hotbar block by amount or position
     private int getSmartBlockSlot() {
         if (mc.player == null) return -1;
 
@@ -388,7 +358,6 @@ public class Scaffold extends Module {
         return best;
     }
 
-    // OpenSSNG: find inventory block and move to hotbar
     private boolean autoRefillBlock() {
         if (mc.player == null || !this.autoRefill.getValue()
                 || !this.refillFromInventory.getValue()) {
@@ -403,7 +372,6 @@ public class Scaffold extends Module {
                     return false;
                 }
 
-                // fallback: move to selected slot
                 mc.gameMode.handleInventoryMouseClick(
                         mc.player.inventoryMenu.containerId,
                         i,
@@ -490,9 +458,6 @@ public class Scaffold extends Module {
             } else {
                 this.airTicks++;
             }
-
-            // ===== No Up Telly 速度限制 =====
-            this.applyNoUpTellySpeedLimit();
         }
     }
 
@@ -500,12 +465,10 @@ public class Scaffold extends Module {
     public void onTick(TickEvent event) {
         if (mc.player == null) return;
 
-        // 更新副手计数
         int currentOffhandCount = getOffhandBlockCount();
         boolean offhandDepleted = this.lastOffhandCount > 0 && currentOffhandCount == 0;
         this.lastOffhandCount = currentOffhandCount;
 
-        // 自动大陆处理
         if (this.autoContinent.getValue()) {
             handleAutoContinent();
         }
@@ -520,7 +483,6 @@ public class Scaffold extends Module {
         if (this.velocityDelay > 0) this.velocityDelay--;
         if (mc.player.onGround() && this.velocityDelay <= 30) this.velocityDelay = 0;
 
-        // ===== 副手优先槽位切换 =====
         boolean hasOffhand = hasOffhandBlock();
         if (this.autoRefill.getValue()) {
             this.autoRefillBlock();
@@ -572,8 +534,15 @@ public class Scaffold extends Module {
             }
         }
 
-        boolean jumpHeld = InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getKey().getValue());
-        if (this.targetYLevel == -1
+        boolean manualJumpHeld = InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getKey().getValue());
+        boolean jumpHeld = manualJumpHeld;
+
+        boolean useNormalUp = this.mode.is("Telly")
+                && this.noUpTelly.getValue()
+                && this.isUpTelly();
+
+        if (useNormalUp
+                || this.targetYLevel == -1
                 || this.targetYLevel > (int) Math.floor(mc.player.getY()) - 1
                 || mc.player.onGround()
                 || !MovementUtil.isMoving()
@@ -656,84 +625,52 @@ public class Scaffold extends Module {
                 this.calculateTargetRotation();
             }
 
-            // ===== No Up Telly: UP 放置时模拟 Normal 模式 =====
-            boolean noUpTellyActive = this.mode.is("Telly")
-                    && this.noUpTelly.getValue()
-                    && this.isUpTellyPlacement();
-
-            if (noUpTellyActive) {
-                // 模拟 Normal 模式：不延迟、不跳
-                // 保持断疾跑：No Up Telly 上搭时强制断开疾跑
-                if (mc.player.isSprinting()) {
+            if (this.mode.is("Telly")) {
+                if (useNormalUp) {
+                    // 上搭：Normal 行为（手动跳 + 断疾跑 + 速度 clamp）
+                    mc.options.keyJump.setDown(jumpHeld);
+                    mc.options.keySprint.setDown(false);
                     mc.player.setSprinting(false);
-                }
-                mc.options.keySprint.setDown(false);
-                mc.options.keyJump.setDown(MovementUtil.isMoving() || jumpHeld);
-                if (this.eagle.getValue()) {
-                    mc.options.keyShift.setDown(mc.player.onGround() && Eagle.isOnBlockEdge(0.3f));
-                }
-                this.lastRots.setYawPitch(this.rots.getYaw(), this.rots.getPitch());
-                return;
-            }
 
-            if (this.mode.is("Telly") || this.mode.is("NoUpTelly")) {
-                mc.options.keyJump.setDown(MovementUtil.isMoving() || jumpHeld);
-                if (this.airTicks < this.tellyAirTicks.getValue().intValue() && MovementUtil.isMoving()) {
-                    this.rots.setYaw(mc.player.getYRot());
-                    this.lastRots.setYawPitch(this.rots.getYaw(), this.rots.getPitch());
-                    return;
+                    double x = mc.player.getDeltaMovement().x;
+                    double z = mc.player.getDeltaMovement().z;
+                    double horizontal = Math.sqrt(x * x + z * z);
+                    double targetBps = 4.0;
+                    double maxSpeed = targetBps / 20.0;
+                    if (horizontal > maxSpeed) {
+                        double scale = maxSpeed / horizontal;
+                        mc.player.setDeltaMovement(x * scale, mc.player.getDeltaMovement().y, z * scale);
+                    }
+                } else {
+                    // 平搭：Telly 自动跳
+                    mc.options.keyJump.setDown(MovementUtil.isMoving() || jumpHeld);
+
+                    if (this.airTicks < this.tellyAirTicks.getValue().intValue() && MovementUtil.isMoving()) {
+                        this.rots.setYaw(mc.player.getYRot());
+                        this.lastRots.setYawPitch(this.rots.getYaw(), this.rots.getPitch());
+                        return;
+                    }
                 }
             } else if (this.mode.is("KeepY")) {
                 mc.options.keyJump.setDown(MovementUtil.isMoving() || jumpHeld);
             } else {
-                // ================================================================
-                // Eagle 使用 SafeWalk.isOnBlockEdge() 方法
-                // ================================================================
                 if (this.eagle.getValue()) {
                     mc.options.keyShift.setDown(mc.player.onGround() && Eagle.isOnBlockEdge(0.3f));
                 }
             }
         }
         this.lastRots.setYawPitch(this.rots.getYaw(), this.rots.getPitch());
-
-        // ===== No Up Telly 速度限制 =====
-        this.applyNoUpTellySpeedLimit();
     }
 
-    // ======================================================================
-    // NO UP TELLY 速度限制
-    // ======================================================================
     /**
-     * No Up Telly 开启时，把玩家水平速度限制在 [minBps, maxBps] 之间。
-     * 由 onMotion(Post) 和 onTick() 末尾调用。
+     * 检测是否处于上搭状态。
+     * targetYLevel 在玩家空中时不更新，保持地面时的值。
+     * 上搭时玩家跳起，Y 升高，targetYLevel 停在旧层，于是 targetYLevel > 当前 Y。
+     * 平搭时 targetYLevel == 当前 Y - 1，不成立。
      */
-    private void applyNoUpTellySpeedLimit() {
-        if (mc.player == null) return;
-        if (!this.mode.is("Telly") || !this.noUpTelly.getValue()) return;
-        if (!this.noUpTellySpeedLimit.getValue()) return;
-
-        double minBps = this.noUpTellyMinBps.getValue().doubleValue();
-        double maxBps = this.noUpTellyMaxBps.getValue().doubleValue();
-        if (maxBps <= 0) return;
-
-        Vec3 motion = mc.player.getDeltaMovement();
-        double horizontalSpeed = Math.sqrt(motion.x * motion.x + motion.z * motion.z);
-        double currentBps = horizontalSpeed * 20.0;
-
-        if (currentBps <= 0.001) return;
-
-        // 超过上限 → 压到上限
-        if (currentBps > maxBps) {
-            double scale = maxBps / currentBps;
-            mc.player.setDeltaMovement(motion.x * scale, motion.y, motion.z * scale);
-            return;
-        }
-
-        // 低于下限 → 拉回下限
-        if (currentBps < minBps) {
-            double scale = minBps / currentBps;
-            mc.player.setDeltaMovement(motion.x * scale, motion.y, motion.z * scale);
-        }
+    public boolean isUpTelly() {
+        if (mc.player == null) return false;
+        return this.targetYLevel > (int) Math.floor(mc.player.getY());
     }
 
     // ======================================================================
@@ -780,7 +717,6 @@ public class Scaffold extends Module {
             }
         }
 
-        // 自动大陆副手支持
         if (this.supportOffhand.getValue()) {
             ItemStack mainHand = mc.player.getMainHandItem();
             ItemStack offhand = mc.player.getOffhandItem();
@@ -811,11 +747,6 @@ public class Scaffold extends Module {
         }
     }
 
-    private boolean isUpTellyPlacement() {
-        return this.currentPlacement != null
-                && this.currentPlacement.facing == Direction.UP;
-    }
-
     // ======================================================================
     // PRE MOTION
     // ======================================================================
@@ -824,37 +755,19 @@ public class Scaffold extends Module {
         event.setCancelled(true);
         if (mc.screen != null || mc.player == null || this.currentPlacement == null) return;
 
-        // ===== No Up Telly: UP 放置时模拟 Normal 模式 =====
-        boolean noUpTellyActive = this.mode.is("Telly")
+        boolean useNormalUp = this.mode.is("Telly")
                 && this.noUpTelly.getValue()
-                && this.isUpTellyPlacement();
-
-        if (noUpTellyActive) {
-            // Normal 模式：不检查 airTicks / placeDelay，直接放置
-            // 保持断疾跑：No Up Telly 上搭时强制断开疾跑
-            if (mc.player.isSprinting()) {
-                mc.player.setSprinting(false);
-            }
-            mc.options.keySprint.setDown(false);
-            boolean canRayTrace = RayTraceUtil.canRayTrace(
-                    RotationHandler.targetRotation,
-                    this.currentPlacement.facing,
-                    this.currentPlacement.position,
-                    true);
-            if (!canRayTrace) return;
-            this.doSnap();
-            return;
-        }
+                && this.isUpTelly();
 
         if (this.onTickRot.getValue() || (!this.canBuildNow && this.rotationDelay > 0)) {
-            if (this.mode.is("Telly") && this.airTicks < this.tellyAirTicks.getValue().intValue()) return;
-            if (this.mode.is("Telly") && this.tellyPlaceDelay.getValue().intValue() > 0 && this.tellyPlaceDelayTimer < this.tellyPlaceDelay.getValue().intValue()) return;
+            if (!useNormalUp && this.mode.is("Telly") && this.airTicks < this.tellyAirTicks.getValue().intValue()) return;
+            if (!useNormalUp && this.mode.is("Telly") && this.tellyPlaceDelay.getValue().intValue() > 0 && this.tellyPlaceDelayTimer < this.tellyPlaceDelay.getValue().intValue()) return;
             this.c06Place();
             return;
         }
 
-        if (this.mode.is("Telly") && this.airTicks < this.tellyAirTicks.getValue().intValue()) return;
-        if (this.mode.is("Telly") && this.tellyPlaceDelay.getValue().intValue() > 0 && this.tellyPlaceDelayTimer < this.tellyPlaceDelay.getValue().intValue()) return;
+        if (!useNormalUp && this.mode.is("Telly") && this.airTicks < this.tellyAirTicks.getValue().intValue()) return;
+        if (!useNormalUp && this.mode.is("Telly") && this.tellyPlaceDelay.getValue().intValue() > 0 && this.tellyPlaceDelayTimer < this.tellyPlaceDelay.getValue().intValue()) return;
         boolean canRayTrace = RayTraceUtil.canRayTrace(RotationHandler.targetRotation, this.currentPlacement.facing, this.currentPlacement.position, true);
         if (!this.canBuildNow && !this.isPlacementReachable(this.currentPlacement)) return;
         if (this.rotationDelay <= 0 && !this.mode.is("Telly") && !canRayTrace) return;
@@ -873,13 +786,10 @@ public class Scaffold extends Module {
         PoseStack poseStack = event.poseStack();
         if (poseStack == null) return;
 
-        // currentPlacement.position 是被点击的依附方块；
-        // relative(facing) 才是 Scaffold 下一次准备放置方块的空气位置。
         AABB targetBox = new AABB(
                 this.currentPlacement.position.relative(this.currentPlacement.facing)
         );
 
-        // Mark：保持原仓库逻辑，只负责彩色实体方块标记。
         if (this.mark.getValue()) {
             poseStack.pushPose();
             RenderSystem.disableDepthTest();
@@ -904,8 +814,6 @@ public class Scaffold extends Module {
             poseStack.popPose();
         }
 
-        // Esp：独立开关，只画下一次放置位置的白色 BOX 线框。
-        // Mark 以及 Mark Red/Green/Blue/Alpha 保持完全独立。
         if (this.esp.getValue()) {
             BlockPos espPos = this.currentPlacement.position.relative(this.currentPlacement.facing);
             ScaffoldEspRenderer.render(poseStack, espPos);
@@ -1345,7 +1253,7 @@ public class Scaffold extends Module {
         Direction facing = this.currentPlacement.facing;
         if (facing == null) return;
         if (facing == Direction.UP && !mc.player.onGround() && MovementUtil.isMoving()
-                && !mc.options.keyJump.isDown() && (this.mode.is("Telly") || this.mode.is("NoUpTelly"))) return;
+                && !mc.options.keyJump.isDown() && this.mode.is("Telly")) return;
 
         if (!hasPlaceableBlock()) return;
 
@@ -1409,15 +1317,8 @@ public class Scaffold extends Module {
         boolean jumpHeld = InputConstants.isKeyDown(mc.getWindow().getWindow(), mc.options.keyJump.getKey().getValue());
         if (facing == null) return;
 
-        // ===== No Up Telly: UP 放置时模拟 Normal 模式 =====
-        boolean noUpTellyActive = this.mode.is("Telly")
-                && this.noUpTelly.getValue()
-                && facing == Direction.UP;
-
-        if (!noUpTellyActive) {
-            if (facing == Direction.UP && !mc.player.onGround() && MovementUtil.isMoving() && !jumpHeld && !this.mode.is("Normal")) {
-                return;
-            }
+        if (facing == Direction.UP && !mc.player.onGround() && MovementUtil.isMoving() && !jumpHeld && !this.mode.is("Normal")) {
+            return;
         }
 
         if (!this.shouldBuild()) return;

@@ -104,7 +104,7 @@ MainWindow::MainWindow(QWidget* parent)
 
 void MainWindow::buildUi() {
 #ifdef OPENZEN_BUILD_REVISION
-    const QString displayTitle = QStringLiteral("Nebula  ·  build %1")
+   const QString displayTitle = QStringLiteral("Nebula - build %1")
             .arg(QString::fromLatin1(OPENZEN_BUILD_REVISION).left(7));
 #else
     const QString displayTitle = QStringLiteral("Nebula");
@@ -136,7 +136,7 @@ void MainWindow::buildUi() {
     title->setObjectName("title");
 
     hint_ = new QLabel(
-        QStringLiteral("Click Inject on the instance you want to load OpenNilore into. "
+        QStringLiteral("Click Inject on the instance you want to load NEBULA into. "
                        "List refreshes every second."),
         body);
     hint_->setObjectName("hint");

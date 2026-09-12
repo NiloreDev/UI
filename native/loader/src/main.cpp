@@ -10,8 +10,8 @@ int main(int argc, char** argv) {
 
     QApplication app(argc, argv);
     QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
-    QApplication::setApplicationName(QStringLiteral("OpenNilore Loader"));
-    QApplication::setOrganizationName(QStringLiteral("OpenNilore"));
+    QApplication::setApplicationName(QStringLiteral("OpenNebula Loader"));
+    QApplication::setOrganizationName(QStringLiteral("OpenNebula"));
 
     // Main window is constructed up front but kept hidden until the splash
     // emits finished(), so its windowOpacity starts at 0 (set in showEvent

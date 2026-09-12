@@ -21,7 +21,7 @@ import client.nilore.utils.math.LerpUtil;
 import client.nilore.utils.render.RenderUtil;
 
 public class SettingsPanel
-extends ClientBase {
+        extends ClientBase {
     public enum AnimationState { NONE, FADE_IN, FADE_OUT, SWITCHING }
 
     private static final int PANEL_BG_COLOR = new Color(255, 255, 255, 20).getRGB();

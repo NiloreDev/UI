@@ -71,7 +71,7 @@ TitleBar::TitleBar(QWidget* parent)
     dotSpacer->setFixedSize(16, 16);
     layout->addWidget(dotSpacer);
 
-    titleLabel_ = new QLabel(QStringLiteral("OpenNilore Loader"), this);
+    titleLabel_ = new QLabel(QStringLiteral("Nelbula"), this);
     titleLabel_->setStyleSheet(QStringLiteral(
         "color: #e7ecf5; font-weight: 600; font-size: 12px;"
         "font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;"));

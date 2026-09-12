@@ -3,6 +3,7 @@ package client.nilore.hud;
 import client.nilore.NiloreClient;
 import client.nilore.settings.impl.BooleanSetting;
 import client.nilore.settings.impl.ModeSetting;
+import client.nilore.utils.render.ColorUtil;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -32,7 +33,6 @@ import client.nilore.render.Renderer;
 import client.nilore.render.RoundedRectangle;
 import client.nilore.settings.impl.NumberSetting;
 import client.nilore.utils.misc.SoundUtil;
-import client.nilore.utils.render.ColorUtil;
 import client.nilore.utils.render.RenderUtil;
 import client.nilore.utils.render.TextureUtil;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -72,21 +72,7 @@ public class NotificationHud extends HudElement {
     private final NumberSetting maxNotifications = new NumberSetting("Max Notifications", 7, 1, 10, 1);
     private final BooleanSetting needSound = new BooleanSetting("Sound", true);
     private final ModeSetting whichSound = new ModeSetting("Type", "Sigma", "Lever").withDefault("Lever");
-    private final ModeSetting style = new ModeSetting(
-            "Style",
-            "Southside",
-            "Simple",
-            "Naven",
-            "Akarin",
-            "Toast",
-            "Card",
-            "Glass",
-            "Vape",
-            "Minimal",
-            "Pill",
-            "Neon",
-            "Banner"
-    ).withDefault("Southside");
+    private final ModeSetting style = new ModeSetting("Style", "Southside", "Simple", "Naven", "Akarin").withDefault("Southside");
     private final NumberSetting navenTextXOff = new NumberSetting("Naven Text X Off", 7, 0, 20, 0.5f);
     private final NumberSetting navenTextYOff = new NumberSetting("Naven Text Y Off", 11.5, 0, 20, 0.5f);
     private final NumberSetting navenWidthPad = new NumberSetting("Naven Width Pad", 10, 0, 20, 1);
@@ -248,48 +234,8 @@ public class NotificationHud extends HudElement {
             case "Simple" -> renderSimpleCard(drawContext, entry, x, y, alpha);
             case "Naven" -> renderNavenCard(drawContext, entry, x, y, alpha);
             case "Akarin" -> renderAkarinCard(drawContext, entry, x, y, alpha);
-            case "Toast" -> renderToastCard(drawContext, entry, x, y, alpha);
-            case "Card" -> renderCardStyle(drawContext, entry, x, y, alpha);
-            case "Glass" -> renderGlassCard(drawContext, entry, x, y, alpha);
-            case "Vape" -> renderVapeCard(drawContext, entry, x, y, alpha);
-            case "Minimal" -> renderMinimalCard(drawContext, entry, x, y, alpha);
-            case "Pill" -> renderPillCard(drawContext, entry, x, y, alpha);
-            case "Neon" -> renderNeonCard(drawContext, entry, x, y, alpha);
-            case "Banner" -> renderBannerCard(drawContext, entry, x, y, alpha);
             default -> renderSouthsideCard(drawContext, entry, x, y, progress, alpha);
         }
-    }
-
-    private void renderPillCard(DrawContext drawContext, NotificationEntry entry, float x, float y, float alpha) {
-        renderSimpleCard(drawContext, entry, x, y, alpha);
-    }
-
-    private void renderVapeCard(DrawContext drawContext, NotificationEntry entry, float x, float y, float alpha) {
-        renderSimpleCard(drawContext, entry, x, y, alpha);
-    }
-
-    private void renderCardStyle(DrawContext drawContext, NotificationEntry entry, float x, float y, float alpha) {
-        renderSouthsideCard(drawContext, entry, x, y, entry.lastBarProgress, alpha);
-    }
-
-    private void renderGlassCard(DrawContext drawContext, NotificationEntry entry, float x, float y, float alpha) {
-        renderAkarinCard(drawContext, entry, x, y, alpha);
-    }
-
-    private void renderToastCard(DrawContext drawContext, NotificationEntry entry, float x, float y, float alpha) {
-        renderSimpleCard(drawContext, entry, x, y, alpha);
-    }
-
-    private void renderBannerCard(DrawContext drawContext, NotificationEntry entry, float x, float y, float alpha) {
-        renderSouthsideCard(drawContext, entry, x, y, entry.lastBarProgress, alpha);
-    }
-
-    private void renderNeonCard(DrawContext drawContext, NotificationEntry entry, float x, float y, float alpha) {
-        renderAkarinCard(drawContext, entry, x, y, alpha);
-    }
-
-    private void renderMinimalCard(DrawContext drawContext, NotificationEntry entry, float x, float y, float alpha) {
-        renderSimpleCard(drawContext, entry, x, y, alpha);
     }
 
     private void renderSouthsideCard(DrawContext drawContext, NotificationEntry entry,
