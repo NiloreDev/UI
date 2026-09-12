@@ -20,8 +20,8 @@ public class KeepSprint extends Module {
 
     /** 模式选择：Default（原版逻辑） / GrimAC（GrimAC 专用逻辑） */
     public final ModeSetting mode = new ModeSetting(
-            "Mode", "Default", "GrimAC"
-    ).withDefault("Default");
+            "Mode", "GrimAC", "GrimAC"
+    ).withDefault("GrimAC");
 
     /** 攻击前是否处于疾跑状态。用于攻击后判断是否需要恢复。 */
     private boolean wasSprinting;

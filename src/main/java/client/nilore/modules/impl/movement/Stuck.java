@@ -99,7 +99,7 @@ public class Stuck extends Module {
     @Override
     public String getDisplayName() {
         String modeName = modeSetting.getValue();
-        if (modeName == null || modeName.isEmpty() || modeName.equals("Normal")) {
+        if (modeName == null || modeName.isEmpty()) {
             return "§fStuck";
         }
         return "§fStuck[" + modeName + "]";
@@ -113,7 +113,7 @@ public class Stuck extends Module {
     @Override
     public String getSuffix() {
         String modeName = modeSetting.getValue();
-        if (modeName == null || modeName.isEmpty() || modeName.equals("Normal")) {
+        if (modeName == null || modeName.isEmpty()) {
             return null;
         }
         return "[" + modeName + "]";

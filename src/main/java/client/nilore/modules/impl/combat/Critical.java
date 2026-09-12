@@ -8,6 +8,7 @@ import client.nilore.event.impl.TickEvent;
 import client.nilore.modules.Category;
 import client.nilore.modules.Module;
 import client.nilore.modules.impl.combat.antikb.NavenVelocityMode;
+import client.nilore.modules.impl.combat.antikb.NoXZMode;
 import client.nilore.settings.impl.ModeSetting;
 
 /**
@@ -27,8 +28,8 @@ public class Critical extends Module {
 
     /** 模式选择: Default（原版） / GrimAC（GrimAC 专用） */
     public final ModeSetting mode = new ModeSetting(
-            "Mode", "Default", "GrimAC"
-    ).withDefault("Default");
+            "Mode", "GrimAC", "GrimAC"
+    ).withDefault("GrimAC");
 
     public Critical() {
         super("Critical", Category.COMBAT);
@@ -42,7 +43,7 @@ public class Critical extends Module {
     }
 
     public boolean isDefaultMode() {
-        return this.mode.is("Default");
+        return this.mode.is("GrimAC");
     }
 
     @Override
@@ -72,6 +73,7 @@ public class Critical extends Module {
     public boolean isReleaseWindow() {
         // res 对齐: 击退收放(NavenVelocity)进行中 Critical 停手, 避免松疾跑打断放包
         if (NavenVelocityMode.handlingVelocity) return false;
+        if (NoXZMode.handlingVelocity) return false;
         if (mc.player == null) return false;
         Entity target = KillAura.target;
         if (!(target instanceof LivingEntity living)) {

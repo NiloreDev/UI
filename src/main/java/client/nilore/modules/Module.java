@@ -44,6 +44,15 @@ extends ClientBase {
         this.settings = new ArrayList<>();
     }
 
+
+    public Module(String name, Category category, KeyBind bind, List<Setting<?>> settings) {
+
+        this.name = name;
+        this.category = category;
+        this.bind = bind;
+        this.settings = settings;
+    }
+
     public void setKey(int keyCode) {
         this.keyCode = keyCode;
         this.bind.setKey(keyCode);

@@ -39,6 +39,9 @@ public class ItemTags extends Module {
     public final NumberSetting scale =
             new NumberSetting("Scale", 0.25, 0.10, 0.50, 0.01);
 
+    public final NumberSetting backgroundAlpha =
+            new NumberSetting("Background Alpha", 144, 0, 255, 1);
+
     public final BooleanSetting allItems =
             new BooleanSetting("All Items", false);
 
@@ -63,14 +66,6 @@ public class ItemTags extends Module {
     public final BooleanSetting usefulItem =
             new BooleanSetting("Useful Item", true, () -> !allItems.getValue());
 
-    /*
-     * 鍥哄畾绾壊鑳屾櫙锛屼笉鍐嶄娇鐢ㄥ満鏅� Blur銆�
-     *
-     * 杩欐牱鏍囩鏃犺浣嶄簬灞忓箷宸�/鍙筹紝
-     * 浜害閮藉畬鍏ㄤ竴鑷淬€�
-     */
-    private static final int BG_COLOR = 0x90000000;
-
     private static final int NORMAL_COLOR = 0xFFFFFFFF;
     private static final int GOD_COLOR = 0xFFFF0000;
 
@@ -89,7 +84,7 @@ public class ItemTags extends Module {
 
     @Override
     public String getDisplayName() {
-        return "搂fItemTags";
+        return "§fItemTags";
     }
 
     @Override
@@ -111,6 +106,12 @@ public class ItemTags extends Module {
     @EventTarget
     public void onWorldChange(WorldChangeEvent event) {
         entityPositions.clear();
+    }
+
+    private int getBackgroundColor() {
+        int alpha = this.backgroundAlpha.getValue().intValue();
+        alpha = Math.max(0, Math.min(255, alpha));
+        return (alpha << 24) | 0x000000;
     }
 
     private static String getDisplayName(ItemEntity entity) {
@@ -310,17 +311,10 @@ public class ItemTags extends Module {
         float height =
                 mc.getWindow().getGuiScaledHeight();
 
-        /*
-         * 鍘熺増 32px * 0.25 鈮� 8px銆�
-         * Vanilla font 绾� 9px锛屽洜姝ゆ槧灏勬垚鎺ヨ繎鐩稿悓瑙嗚澶у皬銆�
-         */
         float fontScale =
                 (32.0F / 9.0F)
                         * scale.getValue().floatValue();
 
-        /*
-         * 鍦ㄥ紑濮嬬敾鏁翠釜 ItemTags 鍓嶅氨鎭㈠鍥哄畾 UI 鐘舵€併€�
-         */
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableDepthTest();
@@ -374,26 +368,15 @@ public class ItemTags extends Module {
             float top =
                     pos.y - 14.0F;
 
-            /*
-             * 閲嶈锛�
-             * 涓嶅啀璋冪敤 drawBlurredRect銆�
-             *
-             * Blur 浼氶噰鏍疯儗鍚庣殑涓栫晫鐢婚潰锛�
-             * 鍥犳涓€鏉℃爣绛惧乏/鍙充袱杈瑰彲鑳戒寒搴︿笉鍚屻€�
-             */
             RenderUtil.drawFilledRect(
                     poseStack,
                     left,
                     top,
                     boxWidth,
                     14.0F,
-                    BG_COLOR
+                    getBackgroundColor()
             );
 
-            /*
-             * 鑳屾櫙 renderer 鍙兘鍒� shader锛�
-             * 鎵€浠ユ瘡娆℃枃瀛楀墠閮介噸鏂版仮澶嶇函鐧� ShaderColor銆�
-             */
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             RenderSystem.setShaderColor(
@@ -418,12 +401,6 @@ public class ItemTags extends Module {
                         1.0F
                 );
 
-                /*
-                 * shadow=false
-                 *
-                 * 閬垮厤榛戣壊 Shadow 鍦ㄥ皬瀛楀彿涓嬮€犳垚
-                 * 涓€杈圭湅璧锋潵鏇存殫銆�
-                 */
                 event.guiGraphics().drawString(
                         mc.font,
                         text,

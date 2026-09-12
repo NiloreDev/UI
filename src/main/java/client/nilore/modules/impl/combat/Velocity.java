@@ -30,23 +30,12 @@ import client.nilore.utils.animation.SpringAnimation;
 import client.nilore.utils.animation.Timer;
 import client.nilore.utils.rotation.Rotation;
 
-/**
- * Nilore original Velocity + bytecode-recovered Naven Velocity.
- *
- * IMPORTANT:
- * - Original Nilore modes/settings are intentionally retained.
- * - Naven is an additional top-level mode.
- * - Original default remains NoXZ to avoid silently changing existing configs.
- */
 public class Velocity extends Module {
     public static Velocity INSTANCE;
     public static Rotation rotation;
     public static ModeSetting mode;
     public static Object NoXZMode;
 
-    // ================================================================
-    // Original Nilore Velocity settings 閳ワ拷 kept intact
-    // ================================================================
     public final BooleanSetting rotate =
             new BooleanSetting("Rotate", false,
                     () -> mode.is("JumpReset") || mode.is("Mix"));
@@ -84,13 +73,20 @@ public class Velocity extends Module {
             new BooleanSetting("Sprint state check", true,
                     () -> mode.is("NoXZ"));
 
+    public final NumberSetting maxDelayTicks =
+            new NumberSetting("Max Delay Ticks", 10.0, 1.0, 120.0, 1.0,
+                    () -> mode.is("NoXZ"));
+
+    public final BooleanSetting requireKillAura =
+            new BooleanSetting("Require KillAura", true,
+                    () -> mode.is("NoXZ"));
+
+    public final BooleanSetting renderBar =
+            new BooleanSetting("Render Bar", false,
+                    () -> mode.is("NoXZ"));
+
     public final BooleanSetting debugLog =
             new BooleanSetting("Debug Log", false);
-
-    // ================================================================
-    // Recovered Naven Velocity settings
-    // Visible only while top-level Mode == Naven.
-    // ================================================================
 
     public final ModeSetting navenMode =
             new ModeSetting("Naven Mode", "Reduce", "Jump Reset", "Both")
@@ -101,7 +97,6 @@ public class Velocity extends Module {
             new BooleanSetting("Auto Forwards", true,
                     () -> mode.is("Naven"));
 
-    // Screenshot + bytecode: these belong to Naven Jump Reset.
     public final BooleanSetting navenAutoRotation =
             new BooleanSetting("Auto Rotation", false,
                     () -> mode.is("Naven") && navenMode.is("Jump Reset"));
@@ -110,12 +105,10 @@ public class Velocity extends Module {
             new BooleanSetting("Requires KillAura", true,
                     () -> mode.is("Naven") && navenMode.is("Jump Reset"));
 
-    // Screenshot + bytecode: these are Reduce-side settings.
     public final BooleanSetting navenTargetESP =
             new BooleanSetting("Target ESP", true,
                     () -> mode.is("Naven") && !navenMode.is("Jump Reset"));
 
-    // Target ESP outline color. Visible only while Target ESP is enabled.
     public final ModeSetting navenTargetESPColor =
             new ModeSetting("Target ESP Color", "White", "Cyan", "Red", "Green", "Purple")
                     .withDefault("White")
@@ -123,23 +116,22 @@ public class Velocity extends Module {
                             && !navenMode.is("Jump Reset")
                             && navenTargetESP.getValue());
 
-    // Vertical position of the ALINK CHARGING / ALINK SUCCESS HUD.
     public final NumberSetting navenAlinkY =
             new NumberSetting("ALINK Y", 18.0, 0.0, 500.0, 1.0,
                     () -> mode.is("Naven") && !navenMode.is("Jump Reset"));
+
+    public final BooleanSetting sprintCheck =
+            new BooleanSetting("Sprint Check", true,
+                    () -> mode.is("NoXZ") || mode.is("Naven"));
 
     public final BooleanSetting navenDebug =
             new BooleanSetting("Debug", false,
                     () -> mode.is("Naven") && !navenMode.is("Jump Reset"));
 
-    // Original bytecode constructor:
-    // default 4.0, min 0.0, max 8.0, step 1.0
     public final NumberSetting navenMaxCounter =
             new NumberSetting("Max Counter", 4.0, 0.0, 8.0, 1.0,
                     () -> mode.is("Naven") && !navenMode.is("Jump Reset"));
 
-    // Original bytecode constructor:
-    // default 10.0, min 5.0, max 120.0, step 1.0
     public final NumberSetting navenMaxDelayTicks =
             new NumberSetting("Max Delay Ticks", 10.0, 5.0, 120.0, 1.0,
                     () -> mode.is("Naven") && !navenMode.is("Jump Reset"));
@@ -151,7 +143,6 @@ public class Velocity extends Module {
 
     private final Timer grimSyncTimer = new Timer();
     public SpringAnimation navenAirDelayToGround;
-    public SpringAnimation sprintCheck;
 
     public Velocity() {
         super("Velocity", Category.COMBAT);
@@ -174,9 +165,6 @@ public class Velocity extends Module {
         if (mode.is("Naven")) {
             String sub = navenMode.getValue();
             if (sub != null && !sub.isEmpty()) {
-                // Keep the internal mode value "Both" unchanged so the
-                // existing Naven logic continues to work. Only change what
-                // is shown in the module suffix.
                 String displaySub = sub.equalsIgnoreCase("Both") ? "NoXZ" : sub;
                 return "[" + displaySub + "]";
             }
@@ -199,7 +187,6 @@ public class Velocity extends Module {
         if (mode.is("Naven")) {
             String sub = navenMode.getValue();
             if (sub != null && !sub.isEmpty()) {
-                // Same display mapping as getSuffix(): Naven/Both -> NoXZ.
                 String displaySub = sub.equalsIgnoreCase("Both") ? "NoXZ" : sub;
                 return "鎼俧Velocity[" + displaySub + "]";
             }
@@ -214,7 +201,6 @@ public class Velocity extends Module {
         rotation = null;
 
         if (!Arrays.stream(mode.getModes()).toList().contains(mode.getValue())) {
-            // Preserve Nilore's original fallback/default.
             mode.withDefault("NoXZ");
         }
 
@@ -234,9 +220,13 @@ public class Velocity extends Module {
     }
 
     private boolean conflictingMovementModuleEnabled() {
+        boolean scaffoldConflict = (Scaffold.INSTANCE != null && Scaffold.INSTANCE.isEnabled());
+        if (mode.is("Naven")) {
+            scaffoldConflict = false;
+        }
         return (FireballBlink.INSTANCE != null && FireballBlink.INSTANCE.isEnabled())
                 || (Grimfly.INSTANCE != null && Grimfly.INSTANCE.isEnabled())
-                || (Scaffold.INSTANCE != null && Scaffold.INSTANCE.isEnabled());
+                || scaffoldConflict;
     }
 
     @EventTarget
@@ -314,8 +304,6 @@ public class Velocity extends Module {
         Optional<AntiKBMode> optional = currentMode();
         if (conflictingMovementModuleEnabled() || optional.isEmpty()) return;
 
-        // Render3DEvent is the real world-render event used by Nilore ESPs.
-        // Route it directly to Naven without requiring an AntiKBMode API change.
         if (optional.get() instanceof NavenVelocityMode naven) {
             naven.onRender3D(event);
         }
@@ -329,8 +317,6 @@ public class Velocity extends Module {
     }
 
     static {
-        // Original three options preserved in the same order.
-        // Naven is appended; original default remains NoXZ.
         mode = new ModeSetting("Mode", "JumpReset", "Mix", "NoXZ", "Naven")
                 .withDefault("NoXZ");
     }

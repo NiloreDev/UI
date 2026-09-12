@@ -137,12 +137,25 @@ public class BlockIn extends Module {
 
     @Override
     public String getDisplayName() {
-        return "";
+        String order = placeOrder.getValue();
+        if (order == null || order.isEmpty()) {
+            return "§fBlockIn";
+        }
+        return "§fBlockIn[" + order + "]";
     }
 
     @Override
     public String getModuleName() {
-        return "";
+        return "BlockIn";
+    }
+
+    @Override
+    public String getSuffix() {
+        String order = placeOrder.getValue();
+        if (order == null || order.isEmpty()) {
+            return null;
+        }
+        return "[" + order + "]";
     }
 
     @Override

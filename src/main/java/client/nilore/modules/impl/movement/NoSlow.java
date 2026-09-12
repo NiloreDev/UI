@@ -132,15 +132,10 @@ public class NoSlow extends Module {
     private InteractionHand grimACVisualUseHand = InteractionHand.MAIN_HAND;
     private int grimACVisualStableTicks = 0;
 
-    // ==================== Heypixel 模式字段（来自第2个文件的 Default 逻辑） ====================
+    // ==================== Heypixel 模式字段 ====================
     private boolean bowActive;
     private boolean bowDelay;
     private boolean resFoodSwap;
-    private boolean heypixelGrimFoodSwap;
-    private InteractionHand heypixelOriginalHand = InteractionHand.MAIN_HAND;
-    private boolean heypixelGrimSwapSent;
-
-
 
     public NoSlow() {
         super("NoSlow", Category.MOVEMENT);
@@ -159,8 +154,6 @@ public class NoSlow extends Module {
         this.stopBlink();
         this.leakReset();
         this.heypixelReset();
-        this.heypixelGrimFoodSwap = false;
-        this.heypixelGrimSwapSent = false;
         this.clearGrimACVisualLock();
         super.onEnable();
     }
@@ -308,7 +301,6 @@ public class NoSlow extends Module {
 
     private boolean areAllOff() {
         if (this.isHeypixelMode()) {
-            // Heypixel 由独立开关控制
             return !this.heypixelFood.getValue()
                     && !this.heypixelBow.getValue()
                     && !this.heypixelCrossbow.getValue()
@@ -328,6 +320,24 @@ public class NoSlow extends Module {
             return !this.leakBowSetting.getValue() && !this.leakFoodSetting.getValue() && !this.leakBlockSetting.getValue();
         }
         return true;
+    }
+
+    /**
+     * Heypixel 模式下，检查指定物品的开关是否开启。
+     * 用于 gate 所有"通用"路径（tick / packet / slowdown）。
+     */
+    private boolean heypixelIsSwitchEnabled(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return false;
+        UseAnim anim = stack.getUseAnimation();
+        Item item = stack.getItem();
+        if (anim == UseAnim.EAT && this.heypixelFood.getValue()) return true;
+        if ((anim == UseAnim.DRINK || item instanceof PotionItem) && this.heypixelPotion.getValue()) return true;
+        if (anim == UseAnim.BOW && this.heypixelBow.getValue()) return true;
+        if (anim == UseAnim.CROSSBOW && this.heypixelCrossbow.getValue()) return true;
+        if (anim == UseAnim.SPEAR && this.heypixelBow.getValue()) return true;
+        // 盾牌无独立开关，默认走
+        if (anim == UseAnim.BLOCK) return true;
+        return false;
     }
 
     // ================================================================
@@ -519,44 +529,6 @@ public class NoSlow extends Module {
                 || block == Blocks.CRAFTING_TABLE || block == Blocks.ENCHANTING_TABLE;
     }
 
-
-    /**
-     * Heypixel Food swap uses the same hand swap principle as GrimAC:
-     * swap to offhand -> send use packet -> release -> swap back.
-     */
-    private void heypixelGrimFoodSwap(InteractionHand hand, int sequence) {
-        if (mc.player == null || mc.getConnection() == null) return;
-
-        this.heypixelOriginalHand = hand;
-        this.heypixelGrimFoodSwap = true;
-        this.heypixelGrimSwapSent = true;
-
-        InteractionHand swapHand = hand == InteractionHand.MAIN_HAND
-                ? InteractionHand.OFF_HAND
-                : InteractionHand.MAIN_HAND;
-
-        PacketUtil.sendQueued(new ServerboundPlayerActionPacket(
-                ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND,
-                BlockPos.ZERO,
-                Direction.DOWN
-        ));
-
-        PacketUtil.sendQueued(new ServerboundUseItemPacket(swapHand, sequence));
-    }
-
-    private void heypixelGrimFoodSwapBack() {
-        if (!this.heypixelGrimFoodSwap || mc.getConnection() == null) return;
-
-        PacketUtil.sendQueued(new ServerboundPlayerActionPacket(
-                ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND,
-                BlockPos.ZERO,
-                Direction.DOWN
-        ));
-
-        this.heypixelGrimFoodSwap = false;
-        this.heypixelGrimSwapSent = false;
-    }
-
     private boolean isEatOrDrink(ItemStack stack) {
         if (stack.isEmpty()) return false;
         UseAnim anim = stack.getUseAnimation();
@@ -736,23 +708,36 @@ public class NoSlow extends Module {
         ItemStack stack = mc.player.getUseItem();
         if (stack.isEmpty()) return;
 
-        // ===== Heypixel 模式（来自第2个文件的 Default 逻辑） =====
+        // ===== Heypixel 模式 =====
         if (this.isHeypixelMode()) {
-            // 食物/药水/盾牌: 不依赖 Bow 开关, 始终取消减速
-            if (this.isEatOrDrink(stack) || stack.getUseAnimation() == UseAnim.BLOCK) {
-                if (this.heypixelFood.getValue() || this.heypixelPotion.getValue()) {
-                    event.setSlowDown(false);
-                    if (this.heypixelKeepSprinting.getValue()) {
-                        mc.player.setSprinting(true);
-                    }
-                    return;
-                }
-            }
-            // 弓类使用中(bowActive)由状态机取消减速
-            if (this.bowActive) {
+            // 统一开关检查：当前物品类型开关未开 → 直接返回（不取消减速）
+            if (!this.heypixelIsSwitchEnabled(stack)) return;
+
+            UseAnim anim = stack.getUseAnimation();
+            Item item = stack.getItem();
+
+            if (anim == UseAnim.EAT && this.heypixelFood.getValue()) {
                 event.setSlowDown(false);
-                if (this.heypixelKeepSprinting.getValue()) {
-                    mc.player.setSprinting(true);
+                if (this.heypixelKeepSprinting.getValue()) mc.player.setSprinting(true);
+                return;
+            }
+            if ((anim == UseAnim.DRINK || item instanceof PotionItem) && this.heypixelPotion.getValue()) {
+                event.setSlowDown(false);
+                if (this.heypixelKeepSprinting.getValue()) mc.player.setSprinting(true);
+                return;
+            }
+            if (anim == UseAnim.BLOCK) {
+                event.setSlowDown(false);
+                if (this.heypixelKeepSprinting.getValue()) mc.player.setSprinting(true);
+                return;
+            }
+            if (this.bowActive) {
+                boolean bowEnabled = (anim == UseAnim.BOW && this.heypixelBow.getValue())
+                        || (anim == UseAnim.CROSSBOW && this.heypixelCrossbow.getValue())
+                        || (anim == UseAnim.SPEAR && this.heypixelBow.getValue());
+                if (bowEnabled) {
+                    event.setSlowDown(false);
+                    if (this.heypixelKeepSprinting.getValue()) mc.player.setSprinting(true);
                 }
             }
             return;
@@ -764,20 +749,16 @@ public class NoSlow extends Module {
             UseAnim useAnim = stack.getUseAnimation();
             boolean shouldCancel = false;
             switch (useAnim) {
-                case BOW:
-                case CROSSBOW:
-                case SPEAR:
+                case BOW: case CROSSBOW: case SPEAR:
                     if (leakBowSetting.getValue()) shouldCancel = true;
                     break;
-                case EAT:
-                case DRINK:
+                case EAT: case DRINK:
                     if (leakFoodSetting.getValue()) shouldCancel = true;
                     break;
                 case BLOCK:
                     if (leakBlockSetting.getValue()) shouldCancel = true;
                     break;
-                default:
-                    break;
+                default: break;
             }
             if (shouldCancel) {
                 event.setSlowDown(false);
@@ -848,7 +829,7 @@ public class NoSlow extends Module {
             return;
         }
 
-        // ===== Heypixel 模式 Tick（来自第2个文件的 Default 逻辑） =====
+        // ===== Heypixel 模式 Tick =====
         if (isHeypixelMode()) {
             heypixelTick();
             return;
@@ -864,16 +845,10 @@ public class NoSlow extends Module {
 
         // ===== GrimAC 模式 Tick =====
         if (this.isGrimACMode()) {
-            if (this.isBlinking) {
-                ++this.blinkTicks;
-            }
-            if (this.step != Step.NONE && !this.isGrimACMode()) {
-                this.release();
-            }
+            if (this.isBlinking) ++this.blinkTicks;
+            if (this.step != Step.NONE && !this.isGrimACMode()) this.release();
             if (this.isGrimACMode()) {
-                if (step != Step.NONE && step != Step.EATING) {
-                    mc.options.keyUse.setDown(false);
-                }
+                if (step != Step.NONE && step != Step.EATING) mc.options.keyUse.setDown(false);
                 if (step == Step.NONE) {
                     if (mc.player.isUsingItem()
                             && mc.options.keyUse.isDown()
@@ -886,8 +861,7 @@ public class NoSlow extends Module {
                             step = Step.ARMED;
                             mc.options.keyUse.setDown(false);
                             if (mc.player.containerMenu != mc.player.inventoryMenu) {
-                                mc.getConnection().send(
-                                        new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
+                                mc.getConnection().send(new ServerboundContainerClosePacket(mc.player.containerMenu.containerId));
                             }
                         }
                     }
@@ -896,9 +870,7 @@ public class NoSlow extends Module {
                         noUseTicks = 0;
                     } else {
                         noUseTicks++;
-                        if (noUseTicks >= 5) {
-                            release();
-                        }
+                        if (noUseTicks >= 5) release();
                     }
                 } else {
                     noUseTicks = 0;
@@ -907,9 +879,7 @@ public class NoSlow extends Module {
             if (this.releaseTicksRemaining > 0) {
                 this.releaseUseKey();
                 --this.releaseTicksRemaining;
-                if (this.releaseTicksRemaining == 0) {
-                    this.restoreUseKeyState();
-                }
+                if (this.releaseTicksRemaining == 0) this.restoreUseKeyState();
             }
             if (this.pendingUseHand != null) {
                 this.startUseItem(this.pendingUseHand, this.pendingUseCount);
@@ -921,9 +891,7 @@ public class NoSlow extends Module {
                 return;
             }
             if (this.isGrimACMode() && this.grimACBowNoSlow.getValue() && this.didSwapHand && !this.isBlinking) {
-                if (this.useHand != this.lastUseHand) {
-                    this.sendSwapOffhand();
-                }
+                if (this.useHand != this.lastUseHand) this.sendSwapOffhand();
                 releaseItemSent = true;
                 this.didSwapHand = false;
                 this.shouldReleaseItem = false;
@@ -944,15 +912,11 @@ public class NoSlow extends Module {
 
         // ===== Grim 模式 Tick =====
         if (this.isGrimMode()) {
-            if (this.isBlinking) {
-                ++this.blinkTicks;
-            }
+            if (this.isBlinking) ++this.blinkTicks;
             if (this.releaseTicksRemaining > 0) {
                 this.releaseUseKey();
                 --this.releaseTicksRemaining;
-                if (this.releaseTicksRemaining == 0) {
-                    this.restoreUseKeyState();
-                }
+                if (this.releaseTicksRemaining == 0) this.restoreUseKeyState();
             }
             if (this.pendingUseHand != null) {
                 this.startUseItem(this.pendingUseHand, this.pendingUseCount);
@@ -964,9 +928,7 @@ public class NoSlow extends Module {
                 return;
             }
             if (this.isGrimMode() && this.grimBowNoSlow.getValue() && this.didSwapHand && !this.isBlinking) {
-                if (this.useHand != this.lastUseHand) {
-                    this.sendSwapOffhand();
-                }
+                if (this.useHand != this.lastUseHand) this.sendSwapOffhand();
                 releaseItemSent = true;
                 this.didSwapHand = false;
                 this.shouldReleaseItem = false;
@@ -1000,7 +962,7 @@ public class NoSlow extends Module {
         if (FastPlace.INSTANCE != null && FastPlace.INSTANCE.isEnabled()) return;
         if (mc.player == null) return;
 
-        // ===== Heypixel 模式包处理（来自第2个文件的 Default 逻辑） =====
+        // ===== Heypixel 模式包处理 =====
         if (isHeypixelMode()) {
             heypixelOnPacket(event);
             return;
@@ -1143,7 +1105,7 @@ public class NoSlow extends Module {
     }
 
     // ================================================================
-    // Heypixel 模式核心（来自第2个文件的 Default 逻辑）
+    // Heypixel 模式核心
     // ================================================================
 
     private boolean heypixelIsEnabledUse(ItemStack stack) {
@@ -1198,6 +1160,13 @@ public class NoSlow extends Module {
             if (mc.player.isUsingItem()
                     && mc.options.keyUse.isDown()
                     && isUsable(mc.player.getUseItem().getUseAnimation())) {
+
+                // ===== 开关检查：当前使用的物品必须对应开关开启 =====
+                if (!this.heypixelIsSwitchEnabled(mc.player.getUseItem())) {
+                    return;
+                }
+                // ====================================================
+
                 if (isLookingAtInteractableBlock()) {
                     return;
                 }
@@ -1273,9 +1242,7 @@ public class NoSlow extends Module {
         if (!event.isIncoming()) {
             if (p instanceof ServerboundPlayerActionPacket action
                     && action.getAction() == ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM) {
-                if (step == Step.EATING) {
-                    release();
-                }
+                if (step == Step.EATING) release();
                 if (this.bowActive) {
                     this.bowActive = false;
                     this.bowDelay = false;
@@ -1334,9 +1301,15 @@ public class NoSlow extends Module {
                     this.noUseTicks = 0;
                     return;
                 }
-                if (this.isBowLike(handStack.getUseAnimation())) {
+                // ===== 弓类：加开关检查 =====
+                UseAnim anim = handStack.getUseAnimation();
+                boolean bowEnabled = (anim == UseAnim.BOW && this.heypixelBow.getValue())
+                        || (anim == UseAnim.CROSSBOW && this.heypixelCrossbow.getValue())
+                        || (anim == UseAnim.SPEAR && this.heypixelBow.getValue());
+                if (bowEnabled && this.isBowLike(anim)) {
                     this.handleBowUseItem(handStack);
                 }
+                // =========================================
             }
         }
     }
@@ -1349,7 +1322,7 @@ public class NoSlow extends Module {
     }
 
     // ================================================================
-    // Heypixel 模式辅助方法（来自第2个文件）
+    // Heypixel 模式辅助方法
     // ================================================================
 
     private boolean isBowLike(UseAnim anim) {
@@ -1368,6 +1341,23 @@ public class NoSlow extends Module {
             this.shouldReleaseItem = false;
             return;
         }
+
+        // ===== 开关检查：弓/弩各自开关 =====
+        UseAnim anim = stack.getUseAnimation();
+        if (anim == UseAnim.BOW && !this.heypixelBow.getValue()) {
+            this.shouldReleaseItem = false;
+            return;
+        }
+        if (anim == UseAnim.CROSSBOW && !this.heypixelCrossbow.getValue()) {
+            this.shouldReleaseItem = false;
+            return;
+        }
+        if (anim == UseAnim.SPEAR && !this.heypixelBow.getValue()) {
+            this.shouldReleaseItem = false;
+            return;
+        }
+        // =========================================
+
         if (this.isStew(stack)) {
             this.shouldReleaseItem = false;
             return;
@@ -1385,7 +1375,18 @@ public class NoSlow extends Module {
         if (hand != InteractionHand.MAIN_HAND) return false;
         if (this.resFoodSwap) return false;
         if (stack.isEmpty() || !this.isEatOrDrink(stack)) return false;
+
+        // ===== 开关检查：食物/药水各自开关 =====
         UseAnim anim = stack.getUseAnimation();
+        Item item = stack.getItem();
+        boolean isFood = (anim == UseAnim.EAT);
+        boolean isPotion = (anim == UseAnim.DRINK) || (item instanceof PotionItem);
+
+        if (isFood && !this.heypixelFood.getValue()) return false;
+        if (isPotion && !this.heypixelPotion.getValue()) return false;
+        if (!isFood && !isPotion) return false;
+        // =========================================
+
         if (anim == UseAnim.BLOCK || this.isBowLike(anim)) return false;
         if (this.isStew(stack)) return false;
         if (this.isLookingAtInteractableBlock()) return false;
@@ -1461,9 +1462,7 @@ public class NoSlow extends Module {
             }
 
             switch (useAnim) {
-                case BOW:
-                case CROSSBOW:
-                case SPEAR:
+                case BOW: case CROSSBOW: case SPEAR:
                     if ((Boolean) this.leakBowSetting.getValue()) {
                         leakNeedsRelease = false;
                         leakDelayedPacketsMax = ((Number) leakBowTick.getValue()).intValue();
@@ -1471,15 +1470,13 @@ public class NoSlow extends Module {
                         leakDelayingPackets = true;
                     }
                     break;
-                case EAT:
-                case DRINK:
+                case EAT: case DRINK:
                     if ((Boolean) this.leakFoodSetting.getValue()) {
                         event.setCancelled(true);
                         leakSchedulePendingUse(useItem.getHand(), sequence);
                     }
                     break;
-                default:
-                    break;
+                default: break;
             }
         }
     }
