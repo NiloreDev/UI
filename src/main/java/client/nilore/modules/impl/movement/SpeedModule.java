@@ -2,10 +2,11 @@ package client.nilore.modules.impl.movement;
 
 import client.nilore.NiloreClient;
 import client.nilore.event.EventTarget;
-import client.nilore.event.impl.GameTickEvent;
+import client.nilore.event.impl.TickEvent;
 import client.nilore.modules.Category;
 import client.nilore.modules.Module;
 import client.nilore.modules.impl.movement.speed.SpeedMode;
+import client.nilore.modules.impl.movement.speed.impl.SpeedLegit;
 import client.nilore.modules.impl.movement.speed.impl.SpeedMotion;
 import client.nilore.modules.impl.movement.speed.impl.SpeedOnGround;
 import client.nilore.settings.impl.ModeSetting;
@@ -13,29 +14,47 @@ import client.nilore.settings.impl.ModeSetting;
 import java.util.List;
 
 public class SpeedModule extends Module {
+    /** 供 SpeedLegit 的可见性判断引用 */
+    public static SpeedModule INSTANCE;
+
     private final List<SpeedMode> modes = List.of(
             new SpeedOnGround(),
-            new SpeedMotion()
+            new SpeedMotion(),
+            new SpeedLegit()
     );
     public final ModeSetting mode;
     private static SpeedMode activeMode;
 
     public SpeedModule() {
         super("Speed", Category.MOVEMENT);
-        mode = new ModeSetting("Mode", "OnGround", "Motion").withDefault("OnGround");
+        INSTANCE = this;
+        mode = new ModeSetting("Mode", "OnGround", "Motion", "Legit").withDefault("OnGround");
         activeMode = modes.get(0);
         activeMode.setActive(true);
         modes.forEach(speedMode -> getSettings().addAll(speedMode.getValues()));
     }
 
     @Override
-    public String getDisplayName() {
-        return "";
+    public String getModuleName() {
+        return "Speed";
     }
 
     @Override
-    public String getModuleName() {
-        return "";
+    public String getSuffix() {
+        String modeName = mode.getValue();
+        if (modeName == null || modeName.isEmpty()) {
+            return null;
+        }
+        return "[" + modeName + "]";
+    }
+
+    @Override
+    public String getDisplayName() {
+        String modeName = mode.getValue();
+        if (modeName == null || modeName.isEmpty()) {
+            return "§fSpeed";
+        }
+        return "§fSpeed[" + modeName + "]";
     }
 
     @Override
@@ -59,7 +78,7 @@ public class SpeedModule extends Module {
     }
 
     @EventTarget
-    public void onGameTick(GameTickEvent event) {
+    public void onTick(TickEvent event) {
         SpeedMode selected = getActiveMode();
         if (activeMode != selected) {
             activeMode.onDisable();

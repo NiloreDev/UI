@@ -91,6 +91,7 @@ public class ModuleManager extends ClientBase {
         this.register(new Animations());
         this.register(new Wings());
         this.register(new ChestESP());
+        this.register(new IQBoost());
         this.register(new Camera());
         this.register(new ClickGui());
         this.register(new JumpCircles());

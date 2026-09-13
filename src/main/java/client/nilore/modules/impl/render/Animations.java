@@ -8,6 +8,7 @@ import client.nilore.settings.impl.BooleanSetting;
 import client.nilore.settings.impl.ModeSetting;
 import client.nilore.settings.impl.NumberSetting;
 
+import com.electronwill.nightconfig.core.UnmodifiableConfig;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 
@@ -132,6 +133,27 @@ public class Animations extends Module {
                     () -> smallItem.getValue()
             );
 
+
+    /**
+     * Third person visual block state.
+     * Only used by HumanoidModelPatch to change the model pose.
+     */
+    public final BooleanSetting thirdPersonBlock =
+            new BooleanSetting(
+                    "Third Person Block",
+                    true
+            );
+
+    /**
+     * Used by HumanoidModelPatch for third person visual block.
+     */
+    public boolean shouldThirdPersonBlock() {
+        return isEnabled()
+                && thirdPersonBlock.getValue()
+                && isKillAuraBlocking()
+                && ClientBase.mc.player != null;
+    }
+
     /*
      * =========================
      * Swing
@@ -180,7 +202,7 @@ public class Animations extends Module {
             return false;
         }
 
-        // 鍓墜姝ｅ湪浣跨敤鐗╁搧鏃讹紝Animations 鏆傛椂瀹屽叏涓嶅奖鍝嶄富鎵嬨€�
+        // 鍓墜姝ｅ湪浣跨敤鐗╁搧鏃讹紝Animations 鏆傛椂瀹屽叏涓嶅奖鍝嶄富鎵嬨€
         if (isUsingOffhandItem()) {
             return false;
         }
@@ -194,11 +216,11 @@ public class Animations extends Module {
     }
 
     /**
-     * 鐜╁鏄惁姝ｅ湪瀹為檯浣跨敤鍓墜鐗╁搧銆�
+     * 鐜╁鏄惁姝ｅ湪瀹為檯浣跨敤鍓墜鐗╁搧銆
      *
-     * 渚嬪鍚冮噾鑻规灉銆佸枬鑽按銆佹媺寮撱€佷妇鐩剧瓑銆�
-     * 鍙湁杩涘叆 Minecraft 鐨勨€滄鍦ㄤ娇鐢ㄧ墿鍝佲€濈姸鎬佹墠杩斿洖 true锛�
-     * 鍗曠函鎶婄墿鍝佹斁鍦ㄥ壇鎵嬩笉浼氬奖鍝� Animations銆�
+     * 渚嬪鍚冮噾鑻规灉銆佸枬鑽按銆佹媺寮撱€佷妇鐩剧瓑銆
+     * 鍙湁杩涘叆 Minecraft 鐨勨€滄鍦ㄤ娇鐢ㄧ墿鍝佲€濈姸鎬佹墠杩斿洖 true锛
+     * 鍗曠函鎶婄墿鍝佹斁鍦ㄥ壇鎵嬩笉浼氬奖鍝  Animations銆
      */
     public boolean isUsingOffhandItem() {
         return ClientBase.mc.player != null
@@ -292,8 +314,8 @@ public class Animations extends Module {
             return false;
         }
 
-        // 鍓墜姝ｅ湪浣跨敤涓滆タ鏃朵紭鍏堜氦缁� Minecraft 鍘熺増娓叉煋銆�
-        // 浣跨敤缁撴潫鍚� Animations 浼氳嚜鍔ㄦ仮澶嶃€�
+        // 鍓墜姝ｅ湪浣跨敤涓滆タ鏃朵紭鍏堜氦缁  Minecraft 鍘熺増娓叉煋銆
+        // 浣跨敤缁撴潫鍚  Animations 浼氳嚜鍔ㄦ仮澶嶃€
         if (isUsingOffhandItem()) {
             return false;
         }

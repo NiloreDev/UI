@@ -46,7 +46,9 @@ import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -54,22 +56,9 @@ import net.minecraft.world.phys.Vec3;
 /**
  * High-fidelity reconstruction of EdNaven 3.3 Velocity, mounted as Nilore Mode "Naven".
  *
- * Recovered state mapping:
- *   packetQueue        <- apc???
- *   entityPositions    <- ??hp?s?
- *   delayingPackets    <- s?jxxe?
- *   forwardState       <- pxaj
- *   attackCounter      <- xha?xj
- *   jumpPending        <- o??ch??
- *   correctionSeen     <- oa?pc
- *   delayTicks         <- ioeo
- *   jumpPendingTicks   <- xac?aoe
- *   failedRaycasts     <- ???c
- *   forwardResetAt     <- hpjs
- *   target             <- ixa
- *
- * The implementation follows the protected bytecode branch order rather than
- * inventing a simplified "delay N ticks then replay" algorithm.
+ * 合并了 Critical 松疾跑逻辑：攻击阶段（attackCounter > 0）中，
+ * 如果目标处于受击硬直窗口（hurtTime ∈ [7,8] ∪ [0,3]），
+ * 主动松疾跑，等窗口外再恢复并继续攻击。
  */
 public final class NavenVelocityMode extends AntiKBMode {
 
@@ -91,16 +80,12 @@ public final class NavenVelocityMode extends AntiKBMode {
     private long forwardResetAt = -1L;
     private Entity target;
 
-    // Original has render interpolation/progress fields. They are kept so the
-    // reconstructed state transitions match even if Nilore's renderer differs.
     private float progress = 0.0F;
     private float previousProgress = 0.0F;
 
-    /**
-     * ALINK HUD state reconstructed from the original visual behavior:
-     * CHARGING while a Reduce/Both delay is active, SUCCESS briefly after
-     * landing and releasing the queued packets.
-     */
+    /** 合并自 Critical：当前是否处于松疾跑状态。 */
+    private boolean criticalReleased = false;
+
     private enum AlinkState {
         IDLE,
         CHARGING,
@@ -110,15 +95,8 @@ public final class NavenVelocityMode extends AntiKBMode {
     private AlinkState alinkState = AlinkState.IDLE;
     private int alinkSuccessTicks;
 
-    // SUCCESS is intentionally short-lived, matching the toast-like original.
     private static final int ALINK_SUCCESS_DURATION_TICKS = 20;
 
-    /**
-     * Target ESP presets. The ESP is rendered in both first- and third-person.
-     * The renderer also understands an optional
-     * Velocity.INSTANCE.navenTargetESPColor setting (string/mode value) with
-     * these names: White, Cyan, Red, Green, Purple.
-     */
     private enum EspColorPreset {
         WHITE(1.00F, 1.00F, 1.00F),
         CYAN(0.20F, 0.95F, 1.00F),
@@ -137,9 +115,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         }
     }
 
-    // Fallbacks used when the matching Velocity settings are not present.
-    // They are public setters below too, so another config layer can change
-    // them without touching the packet-delay state machine.
     private int alinkHudY = 18;
     private EspColorPreset targetEspColor = EspColorPreset.WHITE;
 
@@ -167,12 +142,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         resetOriginalStyle();
     }
 
-    /**
-     * Exact original reset ordering:
-     * 1) schedule/replay queue if non-empty
-     * 2) clear delaying/forward/jump state
-     * 3) clear predicted positions and counters
-     */
     private void resetOriginalStyle() {
         if (!packetQueue.isEmpty()) {
             scheduleFlush();
@@ -192,6 +161,7 @@ public final class NavenVelocityMode extends AntiKBMode {
         alinkSuccessTicks = 0;
         progress = 0.0F;
         previousProgress = 0.0F;
+        criticalReleased = false;
     }
 
     private void hardReset(boolean replayQueue) {
@@ -217,18 +187,13 @@ public final class NavenVelocityMode extends AntiKBMode {
         alinkState = AlinkState.IDLE;
         alinkSuccessTicks = 0;
         entityPositions.clear();
+        criticalReleased = false;
     }
 
     private void scheduleFlush() {
-        // Original MinecraftClient.execute(this::flush).
         mc.execute(this::flushQueue);
     }
 
-    /**
-     * Original replay behavior includes an important Both-only edge:
-     * after each queued Velocity packet is applied, call the Velocity handler
-     * again so Jump Reset is armed *after* Reduce releases.
-     */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private void flushQueue() {
         if (mc.getConnection() == null) {
@@ -254,23 +219,12 @@ public final class NavenVelocityMode extends AntiKBMode {
         }
     }
 
-    /**
-     * Exact raycast predicate recovered from ecce??h():
-     * current crosshair entity must be exactly the current target object.
-     */
     private boolean isRaycastingTarget() {
         if (mc.player == null || target == null) return false;
         return mc.hitResult instanceof EntityHitResult hit
                 && hit.getEntity() == target;
     }
 
-    /**
-     * Known portion of original xoeh?().
-     *
-     * Original also calls one global helper and checks one extra module class.
-     * Their semantic names are still protected. We deliberately do not invent
-     * replacements for those two checks.
-     */
     private boolean isBlocked() {
         return mc.player == null
                 || mc.player.isUsingItem()
@@ -281,20 +235,9 @@ public final class NavenVelocityMode extends AntiKBMode {
     }
 
     private boolean unresolvedGlobalBlocker() {
-        // Bytecode has:
-        //   helper.cha() == true
-        //   OR moduleManager.get(<obfuscated class>).isEnabled()
-        // Neither class has a proven semantic mapping yet.
-        // Returning false preserves every *confirmed* branch without guessing.
         return false;
     }
 
-    /**
-     * This is the exact packet pass-through classifier from xaji().
-     *
-     * While delaying, packets returning FALSE here are queued/cancelled.
-     * This list maps one-for-one to Nilore's own NoXZ Mojmap translation.
-     */
     private boolean isPassThroughPacket(Packet<?> packet) {
         return packet instanceof ClientboundSetEntityMotionPacket
                 || packet instanceof ClientboundSetHealthPacket
@@ -313,15 +256,11 @@ public final class NavenVelocityMode extends AntiKBMode {
                 && animate.getId() != mc.player.getId();
     }
 
-    /**
-     * Recovered ??eco??(EntityVelocityUpdateS2CPacket).
-     */
     private void handleVelocityPacket(ClientboundSetEntityMotionPacket packet) {
         if (mc.player == null || packet.getId() != mc.player.getId()) {
             return;
         }
 
-        // Original auto-rotation branch exists ONLY in main mode Jump Reset.
         if (Velocity.INSTANCE.navenMode.is("Jump Reset") && Velocity.INSTANCE.navenAutoRotation.getValue()) {
             if (target == null) {
                 float velocityYaw = (float) Math.toDegrees(
@@ -331,20 +270,13 @@ public final class NavenVelocityMode extends AntiKBMode {
                 setNiloreRotationCompat(velocityYaw, mc.player.getYRot());
             }
 
-            // Exact bytecode sets pxaj only inside this branch.
             forwardState = true;
         }
 
-        // Always armed for the local player's velocity packet.
         jumpPending = true;
         jumpPendingTicks = 0;
     }
 
-    /**
-     * Avoids assuming a specific Rotation constructor from a particular Nilore
-     * commit. It populates Velocity.rotation when a common 2-number constructor
-     * is present, which is how Nilore's old JumpReset path exposes rotation.
-     */
     private void setNiloreRotationCompat(float yaw, float secondAngle) {
         try {
             for (Constructor<?> constructor : Rotation.class.getDeclaredConstructors()) {
@@ -375,14 +307,11 @@ public final class NavenVelocityMode extends AntiKBMode {
 
         Packet<?> packet = event.getPacket();
 
-        // Exact packet-event branch: correction is only marked and allowed
-        // through here; reset/flush happens through the later state checks.
         if (packet instanceof ClientboundPlayerPositionPacket) {
             correctionSeen = true;
             return;
         }
 
-        // Jump Reset is a separate early branch in the original packet event.
         if (Velocity.INSTANCE.navenMode.is("Jump Reset")) {
             boolean killAuraRequirementFailed =
                     Velocity.INSTANCE.navenRequiresKillAura.getValue()
@@ -400,7 +329,6 @@ public final class NavenVelocityMode extends AntiKBMode {
             return;
         }
 
-        // Reduce / Both.
         if (isBlocked()) {
             return;
         }
@@ -415,8 +343,6 @@ public final class NavenVelocityMode extends AntiKBMode {
                 alinkState = AlinkState.CHARGING;
                 alinkSuccessTicks = 0;
 
-                // Seed the target immediately so Target ESP is visible from
-                // the first delayed frame instead of waiting for a move packet.
                 if (target != null) {
                     entityPositions.putIfAbsent(target, target.position());
                 }
@@ -427,8 +353,6 @@ public final class NavenVelocityMode extends AntiKBMode {
             return;
         }
 
-        // Exact original semantics:
-        // pass-through packet OR not delaying => leave it alone.
         if (isPassThroughPacket(packet) || !delayingPackets) {
             return;
         }
@@ -438,11 +362,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         packetQueue.add(packet);
     }
 
-    /**
-     * Recovered entityPositions tracking:
-     * - relative entity moves add delta/4096
-     * - entity teleports replace with absolute packet position
-     */
     private void updatePredictedEntityPosition(Packet<?> packet) {
         if (mc.level == null) return;
 
@@ -468,21 +387,34 @@ public final class NavenVelocityMode extends AntiKBMode {
     }
 
     /**
-     * Reduce/Both ALINK state machine.
-     *
-     * Reconstructed visual behavior:
-     * - after the local velocity packet starts a delay, CHARGING is shown;
-     * - progress is delayTicks / navenMaxDelayTicks, clamped to 100%;
-     * - reaching 100% while airborne does NOT cancel the delay; it stays at
-     *   100% until landing;
-     * - landing on a valid KillAura/raycast target releases the queue and
-     *   briefly shows ALINK SUCCESS.
+     * 合并自 Critical：判断当前是否处于松疾跑窗口。
+     * 与 Critical.isReleaseWindow() 逻辑一致：
+     * - 玩家不能处于地面、液体、使用物品、潜行、鞘翅、载具、攀爬
+     * - 玩家不能有失明、缓慢、飘浮效果
+     * - 目标 LivingEntity.hurtTime ∈ [7,8] ∪ [0,3]
      */
+    private boolean isCriticalReleaseWindow() {
+        if (mc.player == null) return false;
+        if (target == null) return false;
+        if (!(target instanceof LivingEntity living)) return false;
+
+        if (mc.player.onGround()) return false;
+        if (mc.player.isInWater() || mc.player.isInLava()) return false;
+        if (mc.player.isUsingItem()) return false;
+        if (mc.player.isShiftKeyDown()) return false;
+        if (mc.player.isFallFlying()) return false;
+        if (mc.player.isPassenger()) return false;
+        if (mc.player.onClimbable()) return false;
+        if (mc.player.hasEffect(MobEffects.BLINDNESS)) return false;
+        if (mc.player.hasEffect(MobEffects.MOVEMENT_SLOWDOWN)) return false;
+        if (mc.player.hasEffect(MobEffects.LEVITATION)) return false;
+
+        int hurtTime = living.hurtTime;
+        return hurtTime >= 7 || hurtTime <= 3;
+    }
+
     @Override
     public void onTick(TickEvent event) {
-        // Keep the last valid aura target for the whole ALINK delay.
-        // KillAura.target can briefly become null between attack/rotation ticks;
-        // clearing it here made Target ESP disappear even though the delay was active.
         Entity auraTarget = KillAura.target;
         if (!delayingPackets || auraTarget != null) {
             target = auraTarget;
@@ -505,7 +437,6 @@ public final class NavenVelocityMode extends AntiKBMode {
             }
         }
 
-        // Original core immediately returns in Jump Reset mode.
         if (Velocity.INSTANCE.navenMode.is("Jump Reset")) {
             updateForwardResetTimer();
             return;
@@ -520,8 +451,6 @@ public final class NavenVelocityMode extends AntiKBMode {
             forwardState = true;
             attackCounter = 0;
 
-            // Keep a baseline for ESP even if no target movement packet has
-            // arrived yet. Subsequent delayed movement packets update it.
             if (target != null) {
                 entityPositions.putIfAbsent(target, target.position());
             }
@@ -533,16 +462,6 @@ public final class NavenVelocityMode extends AntiKBMode {
             progress = Math.max(0.0F, Math.min(1.0F, delayTicks / maxDelay));
             alinkState = AlinkState.CHARGING;
 
-            /*
-             * Important original-facing behavior: Max Delay controls how fast
-             * CHARGING reaches 100%; it is not used here as an airborne hard
-             * timeout. Once full, we continue holding packets until landing.
-             */
-            // Landing is the hard release gate. Once ALINK packet delay is
-            // active, touching the ground releases immediately regardless of
-            // the current CHARGING percentage, RayCast state, or sprint state.
-            // This matches the original behavior where landing itself ends
-            // the airborne delay.
             if (mc.player.onGround()) {
 
                 attackCounter = Velocity.INSTANCE.navenMaxCounter.getValue().intValue();
@@ -550,8 +469,6 @@ public final class NavenVelocityMode extends AntiKBMode {
                 delayingPackets = false;
                 previousProgress = progress;
 
-                // Keep the percentage reached at the moment of landing for
-                // state bookkeeping; SUCCESS does not require 100% charge.
                 alinkState = AlinkState.SUCCESS;
                 alinkSuccessTicks = 0;
                 scheduleFlush();
@@ -566,6 +483,24 @@ public final class NavenVelocityMode extends AntiKBMode {
                 return;
             }
 
+            // ===== 合并自 Critical：松疾跑窗口 =====
+            // 窗口内：主动松疾跑，不攻击，等窗口外再打
+            if (isCriticalReleaseWindow()) {
+                mc.options.keySprint.setDown(false);
+                if (mc.player.isSprinting()) {
+                    mc.player.setSprinting(false);
+                }
+                criticalReleased = true;
+                return;
+            }
+
+            // 窗口外：如果之前因 Critical 松了疾跑，这里恢复
+            if (criticalReleased) {
+                mc.player.setSprinting(true);
+                criticalReleased = false;
+            }
+            // ===== Critical 合并结束 =====
+
             if (!mc.player.isSprinting()) {
                 debug("[N] Failed (Sprint) - Counter: " + attackCounter);
                 return;
@@ -575,21 +510,17 @@ public final class NavenVelocityMode extends AntiKBMode {
             --attackCounter;
         } else if (forwardState) {
             forwardResetAt = System.currentTimeMillis() + 10L;
+        } else {
+            criticalReleased = false;
         }
 
         updateForwardResetTimer();
 
-        // Progress is already advanced explicitly during CHARGING. Keep the
-        // old smoothing only outside the two visible ALINK states.
         if (alinkState == AlinkState.IDLE) {
             updateProgress();
         }
     }
 
-    /**
-     * The indy target for the attack helper was independently recovered:
-     * interactionManager.attackEntity(player, target); swing MAIN_HAND.
-     */
     private void attackTarget(Entity entity) {
         if (mc.player == null || mc.gameMode == null || entity == null) {
             return;
@@ -599,18 +530,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         mc.player.swing(InteractionHand.MAIN_HAND);
     }
 
-    /**
-     * Recovered move-input behavior.
-     *
-     * Jump Reset/Both:
-     *   if forwardState + Auto Forwards => forward=1 AND strafe=0
-     *
-     * Reduce:
-     *   if forwardState + Auto Forwards => forward=1 only
-     *
-     * Original also calls a movement prediction helper in the condition.
-     * The proven part of that helper is approximated by movementGate().
-     */
     @Override
     public void onStrafe(StrafeEvent event) {
         if (mc.player == null) return;
@@ -626,10 +545,7 @@ public final class NavenVelocityMode extends AntiKBMode {
             }
 
             if (jumpPending && mc.player.isSprinting()) {
-                // Original field_6235 > 9 is hurtTime > 9 in this version.
                 if (mc.player.hurtTime > 9 || Velocity.INSTANCE.navenMode.is("Both")) {
-                    // Closest Nilore/vanilla equivalent to setting the recovered
-                    // movement-input event's jumping flag.
                     mc.player.input.jumping = true;
                     jumpPending = false;
                 }
@@ -642,7 +558,6 @@ public final class NavenVelocityMode extends AntiKBMode {
             return;
         }
 
-        // Reduce branch intentionally does NOT zero strafe in bytecode.
         if (forwardState
                 && (!delayingPackets || movementGate())
                 && Velocity.INSTANCE.navenAutoForwards.getValue()) {
@@ -650,13 +565,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         }
     }
 
-    /**
-     * Recovered helper behavior:
-     * - true on ground
-     * - true while attackCounter != 0
-     * - false while rising/falling with positive vertical motion/fallDistance
-     * - final prediction probe is protected; conservative false fallback.
-     */
     private boolean movementGate() {
         if (mc.player == null || mc.level == null) return false;
         if (mc.player.onGround() || attackCounter != 0) return true;
@@ -664,17 +572,9 @@ public final class NavenVelocityMode extends AntiKBMode {
             return false;
         }
 
-        // Protected prediction helper's last probe could not be semantically
-        // named without executing native protection code.
         return false;
     }
 
-    /**
-     * Original jppp(cancellable event): cancel when attackCounter != 0.
-     * The obfuscated event type is not proven to be Nilore SprintEvent, so use
-     * reflection: if this event is cancellable in the local Nilore branch, the
-     * exact behavior is applied without hard-coding a non-existent API.
-     */
     @Override
     public void onSprint(SprintEvent event) {
         if (attackCounter == 0) return;
@@ -686,11 +586,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         }
     }
 
-    /**
-     * Original hpjs timer is serviced by another event:
-     * clear forwardState when 10ms has elapsed, or early while the physical
-     * forward key is held.
-     */
     private void updateForwardResetTimer() {
         if (forwardResetAt == -1L) return;
 
@@ -739,8 +634,6 @@ public final class NavenVelocityMode extends AntiKBMode {
 
     @Override
     public void onRotation(RotationEvent event) {
-        // Rotation object is populated in handleVelocityPacket(). Nilore's
-        // existing rotation pipeline may consume Velocity.rotation.
     }
 
     @Override
@@ -749,9 +642,6 @@ public final class NavenVelocityMode extends AntiKBMode {
 
     @Override
     public void onRender(RenderEvent event) {
-        // Nilore's existing world ESPs (including KillAura Target ESP) render
-        // from RenderEvent, not Render3DEvent. Use the exact same camera
-        // transform path here so the box works in first- and third-person.
         if (!Velocity.INSTANCE.navenTargetESP.getValue()
                 || !delayingPackets
                 || target == null
@@ -766,12 +656,8 @@ public final class NavenVelocityMode extends AntiKBMode {
             return;
         }
 
-        // If no delayed move packet has arrived yet, the target's current
-        // position is still the correct initial server-position baseline.
         Vec3 predicted = entityPositions.getOrDefault(target, target.position());
 
-        // Move the entity's real bounding-box shape to the predicted/server
-        // position rather than rebuilding it only from width/height.
         Vec3 currentPos = target.position();
         AABB box = target.getBoundingBox().move(
                 predicted.x - currentPos.x,
@@ -789,9 +675,6 @@ public final class NavenVelocityMode extends AntiKBMode {
 
         poseStack.pushPose();
         try {
-            // This is how KillAura's own Target ESP handles world coordinates:
-            // translate the RenderEvent matrix by -camera position, then draw
-            // the world-space AABB.
             Camera camera = mc.gameRenderer.getMainCamera();
             Vec3 cameraPos = camera.getPosition();
             poseStack.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
@@ -802,13 +685,7 @@ public final class NavenVelocityMode extends AntiKBMode {
         }
     }
 
-    /**
-     * Kept only for source compatibility with the extra event that was added
-     * during reconstruction. Actual Target ESP rendering is intentionally done
-     * in RenderEvent above, matching Nilore's working KillAura renderer.
-     */
     public void onRender3D(Render3DEvent event) {
-        // no-op: rendering here caused event/camera mismatches in this client
     }
 
     @Override
@@ -828,14 +705,12 @@ public final class NavenVelocityMode extends AntiKBMode {
         int width = 110;
         int height = 18;
 
-        // Dark translucent ALINK panel.
         guiFill(graphics, x, y, x + width, y + height, 0xB8181818);
 
         if (alinkState == AlinkState.CHARGING) {
             int percent = Math.max(0, Math.min(100, Math.round(progress * 100.0F)));
             String text = "Alink Charging " + percent + "%";
 
-            // Thin progress bar at the bottom, duration controlled by Max Delay.
             int barX = x + 3;
             int barY = y + height - 3;
             int barWidth = width - 6;
@@ -851,10 +726,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         }
     }
 
-    /**
-     * Reads an optional Velocity setting named navenAlinkY. If the surrounding
-     * module has not added that setting yet, the local fallback is used.
-     */
     private int resolveAlinkHudY() {
         Object value = readOptionalVelocitySettingValue("navenAlinkY");
         if (value instanceof Number number) {
@@ -863,10 +734,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         return Math.max(0, alinkHudY);
     }
 
-    /**
-     * Reads an optional Velocity setting named navenTargetESPColor. Supported
-     * values are White, Cyan, Red, Green and Purple (case-insensitive).
-     */
     private EspColorPreset resolveTargetEspColor() {
         Object value = readOptionalVelocitySettingValue("navenTargetESPColor");
         if (value != null) {
@@ -880,11 +747,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         return targetEspColor;
     }
 
-    /**
-     * Compatibility reader so this mode remains buildable even before the
-     * optional GUI settings are added to Velocity.java. It supports common
-     * setting APIs exposing getValue(), getMode() or getSelected().
-     */
     private Object readOptionalVelocitySettingValue(String fieldName) {
         try {
             Field field = Velocity.INSTANCE.getClass().getField(fieldName);
@@ -908,7 +770,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         }
     }
 
-    /** Runtime/config hooks when no dedicated Velocity setting exists yet. */
     public void setAlinkHudY(int y) {
         this.alinkHudY = Math.max(0, y);
     }
@@ -931,11 +792,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         return resolveTargetEspColor().name();
     }
 
-    /**
-     * RenderEvent API names differ between Nilore branches. Reflection keeps
-     * this mode source-compatible with the common getPoseStack/getMatrixStack
-     * variants without inventing a hard dependency on one event revision.
-     */
     private PoseStack extractPoseStack(Object event) {
         Object value = readMember(event,
                 "getPoseStack", "getMatrixStack", "getStack", "getMatrices",
@@ -943,7 +799,6 @@ public final class NavenVelocityMode extends AntiKBMode {
         return value instanceof PoseStack stack ? stack : null;
     }
 
-    /** Same compatibility strategy for Render2DEvent's GuiGraphics/context. */
     private Object extractGuiGraphics(Object event) {
         return readMember(event,
                 "getGuiGraphics", "getGraphics", "getContext", "getGuiContext",
@@ -983,18 +838,10 @@ public final class NavenVelocityMode extends AntiKBMode {
         }
     }
 
-    /**
-     * ALINK text style: slightly smaller, lighter and without Minecraft's
-     * heavy drop shadow. This gives the HUD a cleaner rounded-client look
-     * closer to Nilore's module-list typography while keeping the built-in
-     * font as a guaranteed fallback.
-     */
     private void guiDrawCenteredComfortableString(Object graphics, String text, int centerX, int y, int color) {
         final float scale = 0.90F;
         PoseStack pose = null;
 
-        // 1.20.1 GuiGraphics exposes pose(). Reflection keeps this compatible
-        // with branches that renamed the accessor.
         Object poseValue = readMember(graphics, "pose", "getPose", "getPoseStack", "poseStack");
         if (poseValue instanceof PoseStack stack) {
             pose = stack;
@@ -1018,14 +865,12 @@ public final class NavenVelocityMode extends AntiKBMode {
             }
         }
 
-        // Fallback when the current GuiGraphics branch does not expose a pose.
         int width = mc.font.width(text);
         int x = centerX - width / 2;
         invokeGuiDrawString(graphics, text, x, y, color, false);
     }
 
     private boolean invokeGuiDrawString(Object graphics, String text, int x, int y, int color, boolean shadow) {
-        // GuiGraphics#drawString(Font, String, int, int, int, boolean)
         for (Method method : graphics.getClass().getMethods()) {
             if (!method.getName().equals("drawString") || method.getParameterCount() != 6) {
                 continue;

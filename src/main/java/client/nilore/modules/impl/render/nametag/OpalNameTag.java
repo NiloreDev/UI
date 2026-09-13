@@ -24,6 +24,7 @@ import client.nilore.event.impl.PacketEvent;
 import client.nilore.event.impl.Render2DEvent;
 import client.nilore.event.impl.RenderEvent;
 import client.nilore.modules.impl.render.NameTags;
+import client.nilore.modules.impl.combat.AntiBots;
 import client.nilore.modules.impl.world.Teams;
 import client.nilore.render.FontPresets;
 import client.nilore.render.FontRenderer;
@@ -115,6 +116,11 @@ public class OpalNameTag extends NameTagStyle {
 
     // ========== 判断是否应该显示该实体 ==========
     private boolean shouldShowEntity(Entity entity) {
+        // AntiBots过滤：假人不显示NameTag
+        if (AntiBots.isBot(entity) || AntiBots.isBedWarsBot(entity)) {
+            return false;
+        }
+
         if (entity == mc.player) return false;
         if (!entity.isAlive()) return false;
 

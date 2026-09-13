@@ -34,6 +34,7 @@ import client.nilore.event.impl.PacketEvent;
 import client.nilore.event.impl.PreMotionEvent;
 import client.nilore.event.impl.Render2DEvent;
 import client.nilore.event.impl.RenderEvent;
+import client.nilore.event.impl.StrafeEvent;
 import client.nilore.event.impl.TickEvent;
 import client.nilore.event.impl.UpdateHeldItemEvent;
 import client.nilore.hud.ModuleListHud;
@@ -89,6 +90,7 @@ public class Scaffold extends Module {
     // ======================================================================
     public final BooleanSetting renderItemSpoof = new BooleanSetting("Render Item Spoof", true);
     public final ModeSetting switchMode = new ModeSetting("Switch Mode", "Normal", "Hotbar", "Full").withDefault("Hotbar");
+    public final NumberSetting bps = new NumberSetting("BPS", 10, 2, 10, 1);
     public final BooleanSetting supportOffhand = new BooleanSetting("Support Offhand", true);
 
     public final ModeSetting blockSwitchMode = new ModeSetting(
@@ -106,6 +108,7 @@ public class Scaffold extends Module {
     // CLUTCH SETTINGS
     // ======================================================================
     public final BooleanSetting clutch = new BooleanSetting("Clutch", true);
+    public final NumberSetting clutchDepth = new NumberSetting("Clutch Depth", 4, 2, 5, 1, this.clutch::getValue);
     public final NumberSetting clutchTrigger = new NumberSetting("Clutch Trigger", 0.3, 0.1, 2.0, 0.1);
     public final NumberSetting clutchSimFrames = new NumberSetting("Clutch Sim Frames", 3, 1, 5, 1);
     public final NumberSetting scanRadius = new NumberSetting("Scan Radius", 6, 1, 12, 1);
@@ -125,6 +128,7 @@ public class Scaffold extends Module {
     public final BooleanSetting blockCounter = new BooleanSetting("Block Counter", true);
     public final ModeSetting blockCounterStyle = new ModeSetting("Block Counter Style", "Amunix", "Modern", "Naven", "Nitro").withDefault("Modern");
     public final NumberSetting offsetY = new NumberSetting("Offset Y", 20, 0, 220, 5);
+    public final NumberSetting nitroOffsetY = new NumberSetting("Nitro Offset", 20, 0, 220, 5, () -> this.blockCounterStyle.is("Nitro"));
     public final BooleanSetting mark = new BooleanSetting("Mark", true);
     public final NumberSetting markRed = new NumberSetting("Mark Red", 255, 0, 255, 1, () -> this.mark.getValue());
     public final NumberSetting markGreen = new NumberSetting("Mark Green", 55, 0, 255, 1, () -> this.mark.getValue());
@@ -195,6 +199,11 @@ public class Scaffold extends Module {
             return null;
         }
         return "[" + modeName + "]";
+    }
+
+    @EventTarget
+    public void onStrafe(StrafeEvent strafeEvent) {
+        // Scaffold 2 strafe hook merged. Kept lightweight to preserve base movement logic.
     }
 
     @Override

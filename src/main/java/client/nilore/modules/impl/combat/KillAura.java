@@ -2,6 +2,8 @@ package client.nilore.modules.impl.combat;
 
 import client.nilore.NiloreClient;
 import client.nilore.modules.impl.combat.antikb.AntiKBMode;
+import client.nilore.modules.impl.combat.antikb.NavenVelocityMode;
+import client.nilore.modules.impl.combat.antikb.NoXZMode;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
@@ -24,8 +26,6 @@ import java.util.stream.StreamSupport;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
@@ -107,7 +107,7 @@ public class KillAura extends Module {
     public final BooleanSetting infSwitch       = new BooleanSetting("Infinity Switch", false);
     public final BooleanSetting preferBaby      = new BooleanSetting("Prefer Baby", false);
     public final BooleanSetting morePart        = new BooleanSetting("More Particles", false);
-    public final BooleanSetting keepSprint      = new BooleanSetting("Keep Sprint", true);   // ★ 合并自第2个
+    public final BooleanSetting keepSprint      = new BooleanSetting("Keep Sprint", true);
     public final ModeSetting style = new ModeSetting("Style", "New", "Old", "onTickRot").withDefault("New");
 
     public final BooleanSetting fix             = new BooleanSetting("Fix", false,
@@ -364,7 +364,12 @@ public class KillAura extends Module {
                 poseStack.pushPose();
                 Camera camera = mc.gameRenderer.getMainCamera();
                 Vec3 cameraPos = camera.getPosition();
-                poseStack.translate(-cameraPos.x(), -cameraPos.y(), -cameraPos.z());
+
+                String renderMode = this.targetEsp.getValue();
+                // NurikZapen 自己处理世界坐标和摄像机偏移，不能重复 translate
+                if (!"NurikZapen".equals(renderMode)) {
+                    poseStack.translate(-cameraPos.x(), -cameraPos.y(), -cameraPos.z());
+                }
 
                 double dx = entity.getX() - entity.xOld;
                 double dy = entity.getY() - entity.yOld;
@@ -375,45 +380,52 @@ public class KillAura extends Module {
                         dy + playerDelta.y - 0.002,
                         dz + playerDelta.z + 0.005);
 
-                String mode = this.targetEsp.getValue();
-                switch (mode) {
-                    case "Spiral" -> RenderUtil.drawSpiralEffect(poseStack, entity, event.partialTick());
-                    case "Box" -> {
-                        int hurtTime = entity instanceof LivingEntity le ? le.hurtTime : 0;
-                        Color color;
-                        if (hurtTime == 0) {
-                            color = new Color(0, 0, 0, 130);
-                        } else if (hurtTime >= 9 && hurtTime <= 10) {
-                            color = new Color(0, 255, 255, 200);
-                        } else {
-                            color = new Color(255, 0, 0, 200);
+                RenderSystem.enableBlend();
+                RenderSystem.defaultBlendFunc();
+                RenderSystem.disableDepthTest();
+                RenderSystem.depthMask(false);
+
+                try {
+                    String mode = renderMode;
+                    switch (mode) {
+                        case "Spiral" -> RenderUtil.drawSpiralEffect(poseStack, entity, event.partialTick());
+                        case "Box" -> {
+                            int hurtTime = entity instanceof LivingEntity le ? le.hurtTime : 0;
+                            Color color = hurtTime == 0
+                                    ? new Color(0, 0, 0, 130)
+                                    : (hurtTime >= 9 && hurtTime <= 10
+                                    ? new Color(0, 255, 255, 200)
+                                    : new Color(255, 0, 0, 200));
+
+                            AABB base = EntityUtil.getInterpolatedAABB(entity, event.partialTick()).move(offset);
+                            AABB padded = new AABB(
+                                    base.minX - 0.175, base.minY - 0.125, base.minZ - 0.175,
+                                    base.maxX + 0.175, base.maxY + 0.225, base.maxZ + 0.175);
+                            RenderUtil.drawFilledColoredBox(padded, poseStack, color, color);
                         }
-                        AABB base = EntityUtil.getInterpolatedAABB(entity, event.partialTick()).move(offset);
-                        AABB padded = new AABB(
-                                base.minX - 0.175, base.minY - 0.125, base.minZ - 0.175,
-                                base.maxX + 0.175, base.maxY + 0.225, base.maxZ + 0.175);
-                        RenderUtil.drawFilledColoredBox(padded, poseStack, color, color);
-                    }
-                    case "Tab" -> {
-                        int hurtTime = entity instanceof LivingEntity le ? le.hurtTime : 0;
-                        Color color;
-                        if (hurtTime == 0) {
-                            color = new Color(0, 0, 0, 130);
-                        } else if (hurtTime == 3) {
-                            color = new Color(255, 255, 255, 200);
-                        } else {
-                            color = new Color(255, 0, 0, 200);
+                        case "Tab" -> {
+                            int hurtTime = entity instanceof LivingEntity le ? le.hurtTime : 0;
+                            Color color = hurtTime == 0
+                                    ? new Color(0, 0, 0, 130)
+                                    : (hurtTime == 3
+                                    ? new Color(255, 255, 255, 200)
+                                    : new Color(255, 0, 0, 200));
+
+                            AABB base = EntityUtil.getInterpolatedAABB(entity, event.partialTick()).move(offset);
+                            AABB band = new AABB(
+                                    base.minX, base.minY + entity.getEyeHeight() + 0.11, base.minZ,
+                                    base.maxX, base.maxY - 0.13, base.maxZ);
+                            RenderUtil.drawFilledColoredBox(band, poseStack, color, color);
                         }
-                        AABB base = EntityUtil.getInterpolatedAABB(entity, event.partialTick()).move(offset);
-                        AABB band = new AABB(
-                                base.minX, base.minY + entity.getEyeHeight() + 0.11, base.minZ,
-                                base.maxX, base.maxY - 0.13, base.maxZ);
-                        RenderUtil.drawFilledColoredBox(band, poseStack, color, color);
+                        case "NurikZapen" -> this.renderNurikZapen(poseStack, entity, event.partialTick());
+                        default -> {}
                     }
-                    case "NurikZapen" -> this.renderNurikZapen(poseStack, entity, event.partialTick());
-                    default -> {}
+                } finally {
+                    RenderSystem.depthMask(true);
+                    RenderSystem.enableDepthTest();
+                    RenderSystem.disableBlend();
+                    poseStack.popPose();
                 }
-                poseStack.popPose();
             }
         }
 
@@ -588,9 +600,8 @@ public class KillAura extends Module {
 
     private void renderNurikZapen(PoseStack poseStack, Entity entity, float partialTick) {
         ensureNurikCaptureTexture();
-        if (!nurikTextureLoaded) {
-            return;
-        }
+        // 如果资源不存在，不直接退出，使用彩色方块作为回退效果
+        // 防止 NurikZapen 因贴图缺失完全不可见
 
         double x = Mth.lerp(partialTick, entity.xOld, entity.getX());
         double y = Mth.lerp(partialTick, entity.yOld, entity.getY()) + entity.getEyeHeight() * 0.5f;
@@ -611,7 +622,9 @@ public class KillAura extends Module {
             RenderSystem.disableDepthTest();
             RenderSystem.depthMask(false);
             RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-            RenderSystem.setShaderTexture(0, NURIK_CAPTURE_TEXTURE);
+            if (nurikTextureLoaded) {
+                RenderSystem.setShaderTexture(0, NURIK_CAPTURE_TEXTURE);
+            }
 
             ModuleListHud moduleList = NiloreClient.getInstance().getHudManager().getHudElement(ModuleListHud.class);
             int[] colors = moduleList == null
@@ -834,6 +847,12 @@ public class KillAura extends Module {
             }
         }
 
+        // 1.9 模式: 攻击冷却未满时不累积攻击计数, 等冷却回满再攻击
+        if (this.delayMode.is("1.9") && mc.player.getAttackStrengthScale(0.0f) < 0.95f) {
+            this.attacks = 0.0f;
+            return;
+        }
+
         if (this.style.is("Old")) {
             float apsValue;
             float minApsValue;
@@ -975,6 +994,16 @@ public class KillAura extends Module {
                 && (this.ignoreSkipTicks.getValue() || ClientBase.delayPackets.isEmpty()
                 || (Critical.INSTANCE != null && Critical.INSTANCE.isEnabled()))) {
             if (this.attackInInventory.getValue() || mc.screen == null) {
+                // KeepSprint 逻辑：攻击前停疾跑 / 保持疾跑
+                if (this.keepSprint.getValue() && mc.player.isSprinting() && this.shouldStopSprint(target)) {
+                    mc.player.setSprinting(false);
+                }
+                if (this.keepSprint.getValue() && mc.player.isSprinting()
+                        && !NoXZMode.handlingVelocity
+                        && !NavenVelocityMode.handlingVelocity) {
+                    this.attacks = 0.0f;
+                    return;
+                }
                 while (this.attacks >= 1.0f) {
                     if (this.style.is("Old") && (Boolean) this.fix.getValue()) {
                         if (!this.doAttack()) {
@@ -1455,6 +1484,23 @@ public class KillAura extends Module {
         return Math.random() > 0.5 ? offset : -offset;
     }
 
+    // ================================================================
+    // KeepSprint 辅助: 判断是否该在攻击前停止疾跑
+    // ================================================================
+    private boolean shouldStopSprint(Entity entity) {
+        if (mc.player == null || mc.level == null || entity == null) return false;
+
+        // velocity 联动: NoXZ 或 Naven 正在处理击退时不打断疾跑, 交给 AntiKB 自己管
+        if (NoXZMode.handlingVelocity || NavenVelocityMode.handlingVelocity) {
+            return false;
+        }
+
+        return entity.getBoundingBox().distanceToSqr(mc.player.getEyePosition()) <= 12.25
+                && mc.player.getUseItem().isEmpty()
+                && !NoXZMode.isAttacking
+                && (!mc.player.onGround() || !mc.options.keyUp.isDown());
+    }
+
     private boolean isWebPlacing() {
         return AutoWebPlace.INSTANCE != null && AutoWebPlace.INSTANCE.isEnabled() && AutoWebPlace.targetRotation != null;
     }
@@ -1515,10 +1561,6 @@ public class KillAura extends Module {
         return entity.distanceTo(mc.player);
     }
 
-    private static boolean isLivingEntity(Entity entity) {
-        return entity instanceof LivingEntity;
-    }
-
     private EntityHitResult entityRaycast(float yaw, float pitch, double reach) {
         Vec3 eye = mc.player.getEyePosition();
         Vec3 direction = Vec3.directionFromRotation(pitch, yaw);
@@ -1565,5 +1607,11 @@ public class KillAura extends Module {
         }
 
         return entityHit;
+    }
+
+
+    // Merged from Killaura2
+    private static boolean isLivingEntity(Entity entity) {
+        return entity instanceof LivingEntity;
     }
 }
